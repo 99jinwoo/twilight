@@ -1,6 +1,6 @@
 # 구현·검증 상태
 
-업데이트: 2026-10-08. **v0.3.0-preview / 단계 C 구현, 실제 API 인증 확인 전**. PR #1은 병합되었고 새 브랜치에서 다음 단계를 진행한다.
+업데이트: 2026-10-08. **v0.3.0-preview / 단계 C 구현, 실제 API 인증 확인 전**. PR #1은 병합되었고 [PR #2](https://github.com/99jinwoo/twilight/pull/2)에서 검토한다.
 
 ## 구현
 
@@ -13,15 +13,21 @@
 
 ## 검증
 
+검증 코드: `716ad76687d02aa0d5072c97af0bdfbd55b1f574`. [CI 37667569031](https://github.com/99jinwoo/twilight/actions/runs/37667569031) 성공. 이후 문서 갱신은 앱 코드와 APK를 바꾸지 않는다.
+
 | 검사 | 현재 결과 |
 |---|---|
-| 로컬 빌드·lint·단위 검사 | `lint test assembleDebug assembleDebugAndroidTest` 통과. 최신 변경과 원격 결과는 배포 전 갱신 |
+| 로컬 빌드·lint·단위 검사 | `lint test assembleDebug assembleDebugAndroidTest` 로컬·CI 모두 통과 |
 | 단위 검사 | 33개 debug/release 통과: 천문·날짜·먼지·발표본·오류·페이지·관측/예보 분리 |
 | 천문 독립 비교 | USNO 108개 시각, 최대 30초 차이. [상세](ASTRONOMY_VALIDATION.md) |
-| lint | 오류 0 / 경고 22. 경고 없는 상태는 아님 |
-| Android 10 / 15 | 새 버전 CI 실행 예정. 이전 버전 결과를 새 버전 통과로 간주하지 않음 |
-| 실서비스 인증 | 미검증. 사용자 키 보유·활용 승인 여부 답변 대기 |
+| lint | CI 오류 0 / 경고 23 (로컬 22). 경고 없는 상태는 아님 |
+| Android 10 / 15 | 각 7개 통과: 암호화 저장 1, 자료 캐시·격리·부분 실패 1, DataStore 2, RemoteViews/앱 실행 3 |
+| 실서비스 인증 | 미검증. 사용자가 키 미발급으로 확인. 세 서비스 신청 안내 제공 |
 | 실제 위치 권한·GPS | 기기 실사용 미검증. 자동 위치 추적 없음 |
+
+RemoteViews는 샘플 7개 크기·합성 관측/예보와 실제 박명 조합 5개 크기에서 날짜·굵기·색·영역 이탈·말줄임·글자 높이를 검사했다. Android 10/15의 생성 PNG에서 실제 자료 배치 5종과 좁은 추가 배치를 눈으로 확인했다.
+
+CI에서 검사한 APK는 34,674,483바이트, 버전 코드 3, v0.3.0-preview이며 서명 검증을 통과했다. SHA-256: `cfb8b874d61c694fda76a190059b666f376fff6cbda6307d830561ce38c5dac6`.
 
 API 파서와 저장소 검사는 공개 스키마 기반 **합성 응답**이다. 실제 서비스 수신·삼성 실기기 동작을 증명하지 않는다. 로컬 Mac arm64 에뮬레이터의 기존 SIGILL 문제로 Linux CI에서 기기 검사를 수행한다.
 
