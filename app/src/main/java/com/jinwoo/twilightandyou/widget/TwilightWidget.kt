@@ -18,11 +18,14 @@ import androidx.glance.unit.ColorProvider
 import com.jinwoo.twilightandyou.MainActivity
 import com.jinwoo.twilightandyou.R
 import com.jinwoo.twilightandyou.data.SettingsStore
+import com.jinwoo.twilightandyou.data.LiveRepository
+import kotlinx.coroutines.CancellationException
 import com.jinwoo.twilightandyou.model.*
 
 class TwilightWidget(
     private val previewSettings: WidgetSettings? = null,
-    private val previewTime: java.time.ZonedDateTime? = null
+    private val previewTime: java.time.ZonedDateTime? = null,
+    private val previewData: LiveSnapshot? = null
 ) : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
@@ -34,7 +37,12 @@ class TwilightWidget(
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         val settings = previewSettings ?: SettingsStore(context).read(widgetId)
-        val model = WidgetPresentation.from(settings, previewTime ?: java.time.ZonedDateTime.now(SEOUL))
+        val now = previewTime ?: java.time.ZonedDateTime.now(SEOUL)
+        val base = WidgetPresentation.from(settings, now)
+        val model = if (settings.showSample) base else try {
+            base.withLiveData(previewData ?: LiveRepository(context).cached(settings, now), settings, now)
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { base }
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             .setData(android.net.Uri.parse("twilight://widget/$widgetId"))
@@ -96,11 +104,12 @@ private fun Dust(label: String, value: Int?, grade: DustGrade, settings: WidgetS
 @Composable
 private fun CurrentContent(model: WidgetPresentation, settings: WidgetSettings, showRegion: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
-        if (showRegion) Label(settings.region, settings, 9, muted = true)
+        if (showRegion) Label(settings.region.take(8), settings, 9, muted = true)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Label(model.temperature, settings, 23, bold = true)
             Spacer(GlanceModifier.width(2.dp))
             Label(model.weather, settings, 19)
+            if (model.weatherIsForecast) Label("예", settings, 6, muted = true)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dust("미", model.pm10, model.pm10Grade, settings)

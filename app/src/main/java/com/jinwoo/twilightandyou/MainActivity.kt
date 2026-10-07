@@ -33,6 +33,9 @@ class MainActivity : ComponentActivity() {
             var busy by remember { mutableStateOf(false) }
             var message by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(id) { settings = SettingsStore(this@MainActivity).read(id) }
+            LaunchedEffect(settings) {
+                if (id == 0) settings?.let { SettingsStore(this@MainActivity).save(0, it) }
+            }
             TwilightTheme {
                 settings?.let { current ->
                     TwilightScreen(

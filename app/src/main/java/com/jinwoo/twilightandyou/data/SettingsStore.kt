@@ -22,7 +22,11 @@ class SettingsStore(context: Context) {
             palette = enumValueOrDefault(p[stringPreferencesKey(prefix + "palette")], WidgetPalette.DUSK),
             opacity = (p[intPreferencesKey(prefix + "opacity")] ?: 100).coerceIn(25, 100),
             fontScale = (p[floatPreferencesKey(prefix + "font")] ?: 1f).coerceIn(0.85f, 1.2f),
-            showSample = p[booleanPreferencesKey(prefix + "sample")] ?: false
+            showSample = p[booleanPreferencesKey(prefix + "sample")] ?: false,
+            latitude = p[doublePreferencesKey(prefix + "latitude")],
+            longitude = p[doublePreferencesKey(prefix + "longitude")],
+            airArea = p[stringPreferencesKey(prefix + "airArea")],
+            station = p[stringPreferencesKey(prefix + "station")] ?: ""
         )
     }
 
@@ -41,6 +45,14 @@ class SettingsStore(context: Context) {
             p[intPreferencesKey(prefix + "opacity")] = settings.opacity.coerceIn(25, 100)
             p[floatPreferencesKey(prefix + "font")] = settings.fontScale.coerceIn(0.85f, 1.2f)
             p[booleanPreferencesKey(prefix + "sample")] = settings.showSample
+            val lat = doublePreferencesKey(prefix + "latitude")
+            val lon = doublePreferencesKey(prefix + "longitude")
+            val area = stringPreferencesKey(prefix + "airArea")
+            if (settings.latitude != null && settings.longitude != null && settings.point != null) {
+                p[lat] = settings.latitude; p[lon] = settings.longitude
+            } else { p.remove(lat); p.remove(lon) }
+            if (settings.airArea == null) p.remove(area) else p[area] = settings.airArea
+            p[stringPreferencesKey(prefix + "station")] = settings.station.trim().take(60)
         }
     }
 

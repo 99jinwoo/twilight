@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.glance.appwidget.updateAll
 import androidx.work.*
 import java.util.concurrent.TimeUnit
+import com.jinwoo.twilightandyou.data.SettingsStore
+import com.jinwoo.twilightandyou.data.LiveRepository
 
 fun widgetIds(context: Context): List<Int> {
     val manager = AppWidgetManager.getInstance(context)
@@ -31,6 +33,11 @@ class WidgetRefreshWorker(context: Context, parameters: WorkerParameters) : Coro
     override suspend fun doWork(): Result {
         if (widgetIds(applicationContext).isEmpty()) return Result.success()
         return try {
+            TwilightWidget().updateAll(applicationContext)
+            val settings = widgetIds(applicationContext).map { SettingsStore(applicationContext).read(it) }
+                .filter { !it.showSample }
+                .distinctBy { Triple(it.point, it.station, it.forecastArea) }
+            for (value in settings) LiveRepository(applicationContext).refresh(value)
             TwilightWidget().updateAll(applicationContext)
             Result.success()
         } catch (e: java.util.concurrent.CancellationException) {

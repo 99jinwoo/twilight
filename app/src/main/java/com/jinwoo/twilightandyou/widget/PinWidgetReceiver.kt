@@ -24,7 +24,11 @@ class PinWidgetReceiver : BroadcastReceiver() {
             palette = WidgetPalette.entries.firstOrNull { it.name == intent.getStringExtra("palette") } ?: WidgetPalette.DUSK,
             opacity = intent.getIntExtra("opacity", 100),
             fontScale = intent.getFloatExtra("font", 1f),
-            showSample = intent.getBooleanExtra("sample", false)
+            showSample = intent.getBooleanExtra("sample", false),
+            latitude = if (intent.hasExtra("latitude")) intent.getDoubleExtra("latitude", Double.NaN) else null,
+            longitude = if (intent.hasExtra("longitude")) intent.getDoubleExtra("longitude", Double.NaN) else null,
+            airArea = intent.getStringExtra("airArea"),
+            station = intent.getStringExtra("station").orEmpty()
         )
         val pending = goAsync()
         (context.applicationContext as TwilightApplication).applicationScope.launch {
@@ -47,5 +51,11 @@ class PinWidgetReceiver : BroadcastReceiver() {
             .putExtra("opacity", settings.opacity)
             .putExtra("font", settings.fontScale)
             .putExtra("sample", settings.showSample)
+            .putExtra("airArea", settings.airArea)
+            .putExtra("station", settings.station)
+            .apply {
+                settings.latitude?.let { putExtra("latitude", it) }
+                settings.longitude?.let { putExtra("longitude", it) }
+            }
     }
 }

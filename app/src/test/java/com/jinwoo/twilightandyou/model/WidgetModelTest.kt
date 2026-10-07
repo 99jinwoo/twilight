@@ -23,7 +23,7 @@ class WidgetModelTest {
             assertEquals(DustGrade.MISSING, DustGrade.fromConcentration(-1, fine))
         }
     }
-    @Test fun unconnectedDefaultDoesNotManufactureWeatherOrTwilight() {
+    @Test fun unconnectedWeatherStaysMissingWhileTwilightIsCalculated() {
         for (kind in TwilightKind.entries) for (mode in EventMode.entries) {
             val model = WidgetPresentation.from(WidgetSettings(twilight = kind, eventMode = mode))
             assertFalse(model.isSample)
@@ -31,8 +31,8 @@ class WidgetModelTest {
             assertNull(model.pm10)
             assertNull(model.pm25)
             assertEquals(DustGrade.MISSING, model.pm10Grade)
-            assertNull(model.twilight.next)
-            assertNull(model.twilight.previous)
+            assertNotNull(model.twilight.next)
+            assertNotNull(model.twilight.previous)
             assertTrue(model.hourly.isEmpty())
         }
     }

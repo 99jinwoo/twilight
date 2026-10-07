@@ -1,5 +1,7 @@
 package com.jinwoo.twilightandyou.model
 
+import com.jinwoo.twilightandyou.astronomy.Coordinates
+import com.jinwoo.twilightandyou.astronomy.SolarCalculator
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -51,8 +53,20 @@ data class WidgetSettings(
     val palette: WidgetPalette = WidgetPalette.DUSK,
     val opacity: Int = 100,
     val fontScale: Float = 1f,
-    val showSample: Boolean = false
-)
+    val showSample: Boolean = false,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val airArea: String? = null,
+    val station: String = ""
+) {
+    val point: Coordinates? get() {
+        val lat = latitude
+        val lon = longitude
+        return if (lat != null && lon != null) runCatching { Coordinates(lat, lon) }.getOrNull()
+            else Regions.find(region)?.point
+    }
+    val forecastArea: String get() = airArea ?: Regions.find(region)?.airArea.orEmpty()
+}
 
 enum class WidgetShape(val title: String, val width: Int, val height: Int) {
     COMPACT("1×1", 100, 112), WIDE("가로 2×1", 224, 112), TALL("세로 1×2", 112, 228);
@@ -68,7 +82,7 @@ enum class WidgetShape(val title: String, val width: Int, val height: Int) {
 
 data class TwilightEvent(val name: String, val at: ZonedDateTime) {
     fun labelOn(today: LocalDate): String {
-        val local = at.withZoneSameInstant(SEOUL)
+        val local = at.withZoneSameInstant(SEOUL).plusSeconds(30).truncatedTo(ChronoUnit.MINUTES)
         return "${relativeDay(local.toLocalDate(), today)} $name ${local.format(DateTimeFormatter.ofPattern("HH:mm"))}"
     }
 }
@@ -101,7 +115,8 @@ data class WidgetPresentation(
     val today: LocalDate,
     val twilight: TwilightPair,
     val hourly: List<HourlyWeather>,
-    val isSample: Boolean
+    val isSample: Boolean,
+    val weatherIsForecast: Boolean = false
 ) {
     val pm10Grade get() = DustGrade.fromConcentration(pm10, false)
     val pm25Grade get() = DustGrade.fromConcentration(pm25, true)
@@ -113,7 +128,7 @@ data class WidgetPresentation(
             val localNow = now.withZoneSameInstant(SEOUL)
             val today = localNow.toLocalDate()
             if (!settings.showSample) return WidgetPresentation(
-                "—°", "❔", null, null, today, TwilightPair(null, null), emptyList(), false
+                "—°", "❔", null, null, today, settings.point?.let { SolarCalculator.pair(localNow, it, settings.twilight) } ?: TwilightPair(null, null), emptyList(), false
             )
             // Layout fixtures only: these times are not astronomical calculations.
             val (morning, evening) = when (settings.twilight) {
