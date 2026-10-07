@@ -44,7 +44,7 @@ class TwilightWidget(private val previewSettings: WidgetSettings? = null) : Glan
                     .background(ImageProvider(R.drawable.widget_background), colorFilter = ColorFilter.tint(ColorProvider(tint)))
                     .appWidgetBackground()
                     .let { if (previewSettings == null) it.clickable(actionStartActivity(intent)) else it }
-                    .padding(if (shape == WidgetShape.COMPACT) 4.dp else 6.dp),
+                    .padding(if (shape == WidgetShape.COMPACT || size.height.value < 96f) 4.dp else 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when (shape) {
