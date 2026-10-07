@@ -1,10 +1,17 @@
 package com.jinwoo.twilightandyou.ui
 
+import android.widget.FrameLayout
+import android.widget.RemoteViews
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.DpSize
+import androidx.glance.appwidget.compose
+import com.jinwoo.twilightandyou.widget.TwilightWidget
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -15,8 +22,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -92,6 +97,7 @@ fun TwilightScreen(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp))
                 }
                 Text("미 = 미세먼지   초 = 초미세먼지", color = Muted, fontSize = 11.sp)
+                Text("홈 격자에 따라 실제 크기가 달라집니다. 좁은 칸에서는 글자를 줄여 필수 정보를 유지합니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
             SettingSection("01", "고정 지역") {
                 ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it)) }
@@ -155,32 +161,30 @@ private fun SettingSection(number: String, title: String, content: @Composable C
 
 @Composable
 private fun ComposeWidgetPreview(settings: WidgetSettings, shape: WidgetShape) {
-    val model = WidgetPresentation.from(settings)
-    val color = Color(settings.palette.foreground)
-    Box(
-        Modifier.size(shape.width.dp, shape.height.dp).clip(RoundedCornerShape(18.dp))
-            .background(Color(settings.palette.background).copy(alpha = settings.opacity / 100f)).padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (shape != WidgetShape.COMPACT) Text(settings.region, color = color.copy(alpha = 0.7f), fontSize = 10.sp)
-            Text("${model.temperature} ${model.weather}", fontSize = (24 * settings.fontScale).sp, color = color, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                PreviewDust("미", model.pm10Grade, color)
-                PreviewDust("초", model.pm25Grade, color)
-            }
-            if (shape == WidgetShape.TALL) Spacer(Modifier.height(15.dp))
-            Text("${model.eventName} ${model.eventTime}", fontSize = (10 * settings.fontScale).sp, color = color, fontWeight = FontWeight.Medium)
-            Text("샘플 10/07 17시", color = color.copy(alpha = 0.65f), fontSize = 8.sp)
-        }
+    val context = LocalContext.current
+    var remoteViews by remember { mutableStateOf<RemoteViews?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(settings, shape) {
+        failed = false
+        try {
+            remoteViews = TwilightWidget(settings).compose(context, size = DpSize(shape.width.dp, shape.height.dp))
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { failed = true }
     }
-}
-
-@Composable
-private fun PreviewDust(label: String, grade: DustGrade, textColor: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp),
-        modifier = Modifier.semantics { contentDescription = "$label ${grade.title}" }) {
-        Text(label, fontSize = 10.sp, color = textColor)
-        Box(Modifier.size(8.dp).clip(CircleShape).background(Color(grade.argb)))
+    Box(Modifier.size(shape.width.dp, shape.height.dp), contentAlignment = Alignment.Center) {
+        if (failed) Text("미리보기를 불러오지 못했습니다", fontSize = 10.sp)
+        else remoteViews?.let { snapshot ->
+            AndroidView(
+                factory = { FrameLayout(it) },
+                modifier = Modifier.fillMaxSize(),
+                update = { host ->
+                    if (host.tag !== snapshot) {
+                        host.removeAllViews()
+                        host.addView(snapshot.apply(context, host))
+                        host.tag = snapshot
+                    }
+                }
+            )
+        }
     }
 }

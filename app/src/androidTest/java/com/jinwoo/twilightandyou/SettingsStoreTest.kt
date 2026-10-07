@@ -33,7 +33,7 @@ class SettingsStoreTest {
         try {
             store.save(7002, WidgetSettings(opacity = -50, fontScale = 10f))
             assertEquals(25, store.read(7002).opacity)
-            assertEquals(1.2f, store.read(7002).fontScale)
+            assertEquals(1.2f, store.read(7002).fontScale, 0.001f)
         } finally { store.delete(7002) }
     }
 }

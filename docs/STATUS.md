@@ -17,7 +17,8 @@
 - Mac arm64 에뮬레이터: `init_cache_info`에서 SIGILL로 부팅 실패. 화면 검사 완료 아님.
 - JVM 검사 7개: 먼지 경계값·결측·독립 등급·샘플 옵트인·박명 선택·크기 전환.
 - 기기 검사 4개: 설정 유지/격리/삭제, 범위 제한, 실제 Glance RemoteViews 표시 및 잘림, 앱 실행.
-- GitHub Actions: 빌드·lint·단위 검사와 API 29/35 기기 검사 구성. 실행 결과는 확인 후 이 문서에 갱신한다.
+- GitHub Actions 첫 실행(37573786002): lint·단위 검사·APK 빌드 통과. API 35 표시 검사에서 56×72dp의 기온+이모지 잘림을 발견했다. 배치를 수정하고 재검사한다.
+- 앱 미리보기는 실제 홈 위젯과 동일한 Glance RemoteViews를 사용한다. 별도 모사 화면으로 배치 차이를 숨기지 않는다.
 - Galaxy S24+·Note9 / Samsung One UI 실기기 검사: 미실시.
 
 ## 아직 구현하지 않은 출시 요구

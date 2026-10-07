@@ -42,7 +42,9 @@ class TwilightWidget(private val previewSettings: WidgetSettings? = null) : Glan
             Box(
                 modifier = GlanceModifier.fillMaxSize()
                     .background(ImageProvider(R.drawable.widget_background), colorFilter = ColorFilter.tint(ColorProvider(tint)))
-                    .appWidgetBackground().clickable(actionStartActivity(intent)).padding(6.dp),
+                    .appWidgetBackground()
+                    .let { if (previewSettings == null) it.clickable(actionStartActivity(intent)) else it }
+                    .padding(6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when (shape) {
@@ -90,10 +92,10 @@ private fun Dust(label: String, value: Int?, grade: DustGrade, settings: WidgetS
 }
 
 @Composable
-private fun DustRow(model: WidgetPresentation, settings: WidgetSettings, expanded: Boolean = false) {
+private fun DustRow(model: WidgetPresentation, settings: WidgetSettings, expanded: Boolean = false, spacing: Int = 8) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Dust("미", model.pm10, model.pm10Grade, settings, expanded)
-        Spacer(GlanceModifier.width(8.dp))
+        Spacer(GlanceModifier.width(spacing.dp))
         Dust("초", model.pm25, model.pm25Grade, settings, expanded)
     }
 }
@@ -101,9 +103,13 @@ private fun DustRow(model: WidgetPresentation, settings: WidgetSettings, expande
 @Composable
 private fun CompactContent(model: WidgetPresentation, settings: WidgetSettings) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
-        Label("${model.temperature} ${model.weather}", settings, 23, bold = true)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Label(model.temperature, settings, 23, bold = true)
+            Spacer(GlanceModifier.width(2.dp))
+            Label(model.weather, settings, 19)
+        }
         Spacer(GlanceModifier.height(2.dp))
-        DustRow(model, settings)
+        DustRow(model, settings, spacing = 4)
         Spacer(GlanceModifier.height(3.dp))
         val shortName = when (model.eventName) {
             "시민 아침" -> "시민↑"; "시민 저녁" -> "시민↓"
