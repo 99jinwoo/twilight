@@ -4,6 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.CharacterStyle
 import android.view.accessibility.AccessibilityNodeInfo
 import android.os.SystemClock
 import android.view.View
@@ -34,6 +37,7 @@ class WidgetRenderingTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 112 to 228, 56 to 160)
+        val failures = mutableListOf<String>()
         for ((width, height) in sizes) {
             val remoteViews = withTimeout(30_000) {
                 TwilightWidget(WidgetSettings(showSample = true), ZonedDateTime.parse("2026-10-07T17:00:00+09:00")).compose(context, size = DpSize(width.dp, height.dp))
@@ -52,6 +56,7 @@ class WidgetRenderingTest {
                     val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
                     File(directory, "widget-${width}x${height}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                     bitmap.recycle()
+                    try {
                     val texts = descendants(view).filterIsInstance<TextView>()
                     val combined = texts.joinToString(" ") { it.text.toString() }
                     assertTrue(combined, combined.contains("22°") && combined.contains("☀"))
@@ -66,7 +71,7 @@ class WidgetRenderingTest {
                     (view as ViewGroup).offsetDescendantRectToMyCoords(upcoming, upcomingBounds)
                     view.offsetDescendantRectToMyCoords(previous, previousBounds)
                     assertTrue("Next twilight must be above previous", upcomingBounds.bottom <= previousBounds.top)
-                    assertTrue("Next twilight should be bold", upcoming.typeface.isBold)
+                    assertTrue("Next twilight should be bold", renderedPaint(upcoming).typeface.isBold)
                     assertNotEquals(upcoming.currentTextColor, previous.currentTextColor)
                     val shape = WidgetShape.forSize(width.toFloat(), height.toFloat())
                     if (shape != WidgetShape.COMPACT) {
@@ -85,8 +90,18 @@ class WidgetRenderingTest {
                         }
                         assertTrue("Vertical clipping at ${width}×${height}: ${text.text}, layout=${layout.height}, view=${text.height}, padding=${text.compoundPaddingTop + text.compoundPaddingBottom}", layout.height <= text.height - text.compoundPaddingTop - text.compoundPaddingBottom)
                     }
+                    } catch (error: AssertionError) {
+                        failures += "${width}×${height}: ${error.message}"
+                    }
                 }
         }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    private fun renderedPaint(view: TextView): TextPaint = TextPaint(view.paint).also { paint ->
+        val text = view.text
+        if (text is Spanned) text.getSpans(0, text.length, CharacterStyle::class.java)
+            .forEach { it.updateDrawState(paint) }
     }
 
     @Test fun mainScreenLaunchesAndSavesScreenshot() {

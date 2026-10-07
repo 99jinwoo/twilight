@@ -162,10 +162,13 @@ private fun TallContent(model: WidgetPresentation, settings: WidgetSettings, wid
             model.hourly.take(4).forEach { hour ->
                 Row(GlanceModifier.fillMaxWidth().height((22f * fit.coerceAtLeast(0.7f)).dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(GlanceModifier.defaultWeight()) {
-                        Label("${relativeDay(hour.at.toLocalDate(), model.today)} ${hour.hour}", fitted, 9, muted = true)
+                        if (width < 90f) {
+                            Label(relativeDay(hour.at.toLocalDate(), model.today), fitted, 7, muted = true)
+                            Label(hour.hour, fitted, 9, muted = true)
+                        } else Label("${relativeDay(hour.at.toLocalDate(), model.today)} ${hour.hour}", fitted, 9, muted = true)
                     }
                     Label(hour.weather, fitted, 16)
-                    Spacer(GlanceModifier.width(5.dp))
+                    Spacer(GlanceModifier.width(if (width < 90f) 3.dp else 5.dp))
                     Label(hour.temperature, fitted, 11, bold = true)
                 }
             }
