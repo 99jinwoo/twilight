@@ -46,6 +46,11 @@ class WidgetRenderingTest {
                     view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                         View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
                     view.layout(0, 0, w, h)
+                    val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    view.draw(Canvas(bitmap))
+                    val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+                    File(directory, "widget-${width}x${height}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    bitmap.recycle()
                     val texts = descendants(view).filterIsInstance<TextView>()
                     val combined = texts.joinToString(" ") { it.text.toString() }
                     assertTrue(combined, combined.contains("22°") && combined.contains("☀"))
@@ -61,13 +66,8 @@ class WidgetRenderingTest {
                         for (line in 0 until layout.lineCount) {
                             assertEquals("Ellipsized at ${width}×${height}: ${text.text}", 0, layout.getEllipsisCount(line))
                         }
-                        assertTrue("Vertical clipping: ${text.text}", layout.height <= text.height - text.compoundPaddingTop - text.compoundPaddingBottom)
+                        assertTrue("Vertical clipping at ${width}×${height}: ${text.text}, layout=${layout.height}, view=${text.height}, padding=${text.compoundPaddingTop + text.compoundPaddingBottom}", layout.height <= text.height - text.compoundPaddingTop - text.compoundPaddingBottom)
                     }
-                    val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    view.draw(Canvas(bitmap))
-                    val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
-                    File(directory, "widget-${width}x${height}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    bitmap.recycle()
                 }
         }
     }

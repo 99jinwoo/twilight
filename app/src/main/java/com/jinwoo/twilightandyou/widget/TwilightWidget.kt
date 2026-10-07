@@ -44,7 +44,7 @@ class TwilightWidget(private val previewSettings: WidgetSettings? = null) : Glan
                     .background(ImageProvider(R.drawable.widget_background), colorFilter = ColorFilter.tint(ColorProvider(tint)))
                     .appWidgetBackground()
                     .let { if (previewSettings == null) it.clickable(actionStartActivity(intent)) else it }
-                    .padding(6.dp),
+                    .padding(if (shape == WidgetShape.COMPACT) 4.dp else 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when (shape) {
@@ -108,16 +108,16 @@ private fun CompactContent(model: WidgetPresentation, settings: WidgetSettings) 
             Spacer(GlanceModifier.width(2.dp))
             Label(model.weather, settings, 19)
         }
-        Spacer(GlanceModifier.height(2.dp))
+        Spacer(GlanceModifier.height(1.dp))
         DustRow(model, settings, spacing = 4)
-        Spacer(GlanceModifier.height(3.dp))
+        Spacer(GlanceModifier.height(2.dp))
         val shortName = when (model.eventName) {
             "시민 아침" -> "시민↑"; "시민 저녁" -> "시민↓"
             "천문 아침" -> "천문↑"; "천문 저녁" -> "천문↓"
             else -> model.eventName
         }
         Label("$shortName ${model.eventTime}", settings, 10, bold = true)
-        Spacer(GlanceModifier.height(2.dp))
+        Spacer(GlanceModifier.height(1.dp))
         Label(if (model.isSample) "샘플 17시" else "미연결", settings, 8, muted = true)
     }
 }
