@@ -51,13 +51,13 @@ class TwilightWidget(
                         .background(ImageProvider(R.drawable.widget_background), colorFilter = ColorFilter.tint(ColorProvider(tint)))
                         .appWidgetBackground()
                         .let { if (previewSettings == null) it.clickable(actionStartActivity(intent)) else it }
-                        .padding(if (shape == WidgetShape.COMPACT || size.height.value < 96f) 4.dp else 6.dp),
+                        .padding(if (shape == WidgetShape.COMPACT) 4.dp else if (size.height.value < 96f) 2.dp else 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     when (shape) {
                         WidgetShape.COMPACT -> CurrentContent(model,
                             settings.copy(fontScale = minOf(settings.fontScale, (cardWidth - 8f) / 80f)), false)
-                        WidgetShape.WIDE -> WideContent(model, settings, size.width.value)
+                        WidgetShape.WIDE -> WideContent(model, settings, size.width.value, size.height.value)
                         WidgetShape.TALL -> TallContent(model, settings, size.width.value)
                     }
                 }
@@ -115,14 +115,15 @@ private fun CurrentContent(model: WidgetPresentation, settings: WidgetSettings, 
 }
 
 @Composable
-private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, width: Float) {
+private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, width: Float, height: Float) {
+    val short = height < 96f
     val narrow = width < 210f
     val leftWidth = if (narrow) 59f else 84f
-    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow) 0.70f else 1f))
-    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow) 0.8f else 1f))
+    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow) 0.70f else if (short) 0.85f else 1f))
+    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.8f else 1f))
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Box(GlanceModifier.width(leftWidth.dp), contentAlignment = Alignment.Center) {
-            CurrentContent(model, currentSettings, true)
+            CurrentContent(model, currentSettings, !short)
         }
         Spacer(GlanceModifier.width(5.dp))
         Box(GlanceModifier.width(1.dp).height(52.dp).background(ColorProvider(Color(settings.palette.muted).copy(alpha = 0.25f)))) {}

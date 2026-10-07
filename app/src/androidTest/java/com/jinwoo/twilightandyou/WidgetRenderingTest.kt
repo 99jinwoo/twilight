@@ -36,7 +36,7 @@ class WidgetRenderingTest {
     @Test fun actualRemoteViewsKeepBothTwilightsAndForecastsWithoutClipping() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 112 to 228, 56 to 160)
+        val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 224 to 72, 112 to 228, 56 to 160)
         val failures = mutableListOf<String>()
         for ((width, height) in sizes) {
             val remoteViews = withTimeout(30_000) {
