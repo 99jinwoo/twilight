@@ -119,7 +119,7 @@ private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, wid
     val short = height < 96f
     val narrow = width < 210f
     val leftWidth = if (narrow) 59f else 84f
-    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow) 0.70f else if (short) 0.85f else 1f))
+    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.70f else 1f))
     val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.8f else 1f))
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Box(GlanceModifier.width(leftWidth.dp), contentAlignment = Alignment.Center) {
