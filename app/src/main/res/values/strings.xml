@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Twilight and You</string>
+    <string name="widget_compact">Twilight · 1×1</string>
+    <string name="widget_wide">Twilight · 가로 2×1</string>
+    <string name="widget_tall">Twilight · 세로 1×2</string>
+    <string name="widget_description">기온·날씨·미세먼지·초미세먼지·박명. 이번 버전은 배치 확인용이며 샘플은 별도로 표시합니다.</string>
+</resources>

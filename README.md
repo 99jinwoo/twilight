@@ -1,11 +1,31 @@
 # Twilight and You
 
-개인용 Android 날씨·미세먼지·박명 위젯.
+한국의 날씨·미세먼지·박명을 홈화면에서 함께 보는 개인용 Android 위젯 앱.
 
-1×1에도 기온, 날씨 이모지, 미세먼지와 초미세먼지 각각의 색상, 지정 박명 시각을 함께 표시합니다. 가로형 2×1과 세로형 1×2도 지원합니다.
+현재는 **0.1.0-preview 배치 검증판**이다. 실제 관측·예보와 천문 계산은 아직 연결하지 않았다. 기본 홈 위젯은 미연결 상태이며, 앱에서 명시적으로 샘플 표시를 켤 수 있다.
 
-- 기준 문서: [SPEC](docs/SPEC.md)
-- 결정 기록: [DECISIONS](docs/DECISIONS.md)
-- 원본 인수인계: [HANDOVER](docs/HANDOVER.md) — 최신 요구는 SPEC을 따릅니다.
+## 사용 흐름
 
-2026-10-07 구현 착수. 현재 단계와 실행 방법은 구현 브랜치에서 추가합니다.
+앱에서 1×1·가로 2×1·세로 1×2 배치와 스타일을 살펴보고 홈화면에 추가한다. 위젯을 누르면 그 위젯의 설정을 편집한다. 지역 이름은 현재 배치용이며 위치 확인 기능은 후속 단계다.
+
+## 개발 환경
+
+JDK 17, Android SDK Platform 36, Build Tools 35.0.0. Android Studio에서 저장소를 열거나 로컬 `ANDROID_HOME`/`local.properties`에 SDK 경로를 지정한다.
+
+```sh
+./gradlew lint test assembleDebug
+./gradlew connectedDebugAndroidTest
+```
+
+두 번째 명령은 Android 10 이상 에뮬레이터나 연결된 기기가 필요하다. 디버그 APK는 `app/build/outputs/apk/debug/app-debug.apk`에 생성된다. 빌드에 날씨 API 키가 필요하지 않다.
+
+GitHub Actions는 PR마다 빌드 및 API 29/35 검사를 실행하도록 구성되어 있다. 실제 실행 결과와 남은 검증은 [STATUS](docs/STATUS.md)에서 확인한다.
+
+## 문서
+
+- [현재 사양](docs/SPEC.md)
+- [결정 이력](docs/DECISIONS.md)
+- [구현·검증 상태](docs/STATUS.md)
+- [원본 인수인계](docs/HANDOVER.md)
+
+Android 10(minSdk 29)을 하한으로 잡았다. Note9은 Android 10 업데이트 기기를 기준으로 하며, Samsung 실기기 호환성은 아직 확인하지 않았다.

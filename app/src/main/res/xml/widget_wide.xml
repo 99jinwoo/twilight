@@ -1,0 +1,11 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="140dp" android:minHeight="72dp"
+    android:targetCellWidth="2" android:targetCellHeight="1"
+    android:minResizeWidth="56dp" android:minResizeHeight="72dp"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:previewImage="@drawable/ic_twilight"
+    android:description="@string/widget_description"
+    android:configure="com.jinwoo.twilightandyou.WidgetConfigurationActivity"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0" android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />
