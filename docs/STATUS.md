@@ -13,13 +13,27 @@
 
 ## 검증 기록
 
-- 로컬 `./gradlew lint test assembleDebug`: 실행 시도. 현재 권한의 로컬 소켓 제한(`SocketException: Operation not permitted`)으로 Gradle 초기화 실패. 통과 아님.
-- Mac arm64 에뮬레이터: `init_cache_info`에서 SIGILL로 부팅 실패. 화면 검사 완료 아님.
-- JVM 검사 7개: 먼지 경계값·결측·독립 등급·샘플 옵트인·박명 선택·크기 전환.
-- 기기 검사 4개: 설정 유지/격리/삭제, 범위 제한, 실제 Glance RemoteViews 표시 및 잘림, 앱 실행.
-- GitHub Actions 첫 실행(37573786002): lint·단위 검사·APK 빌드 통과. API 35 표시 검사에서 56×72dp의 기온+이모지 잘림을 발견했다. 배치를 수정하고 재검사한다.
-- 앱 미리보기는 실제 홈 위젯과 동일한 Glance RemoteViews를 사용한다. 별도 모사 화면으로 배치 차이를 숨기지 않는다.
-- Galaxy S24+·Note9 / Samsung One UI 실기기 검사: 미실시.
+검증한 코드: `935805a8f432a450cd30c0b4cef80bb7042c891e`.
+[GitHub Actions 최종 실행](https://github.com/99jinwoo/twilight/actions/runs/37584107269)에서 아래 검사가 모두 통과했다. 이후 검증 기록만 수정한 문서 커밋은 코드 재검사 대상이 아니다.
+
+| 검사 | 결과 | 범위 |
+|---|---|---|
+| lint | 오류 0, 경고 17 | 버전 업데이트, 구버전이 무시하는 API 31 위젯 속성, 백업 설정 안내 등. 경고가 없는 상태는 아님 |
+| 단위 검사 | 7개, debug/release 모두 통과 | 먼지 경계값·결측·독립 등급·샘플 옵트인·박명 선택·크기 전환 |
+| APK 빌드 | debug·androidTest 성공 | JDK 17 / SDK 36 / Gradle 8.13 |
+| Android 10 / API 29 | 4개 모두 통과 | 설정 유지·격리·삭제·범위 제한, RemoteViews 표시, 앱 실행과 미리보기 로드 |
+| Android 15 / API 35 | 4개 모두 통과 | API 29와 동일한 APK 및 검사 |
+| 실제 위젯 표시 코드 | 5개 크기 통과 | 56×72, 100×112, 140×72, 224×112, 112×228dp. 필수 텍스트·샘플 표시·문자 잘림·영역 이탈 검사 |
+| 화면 확인 | 완료 | 실제 기기 검사에서 저장한 앱 미리보기 및 위젯 PNG 확인 |
+| APK 서명 | 검증 성공 | 테스트용 debug 서명, APK v2 서명 확인 |
+
+- 작은 1×1의 이모지 잘림, 좁은 가로형의 안내 줄 잘림, 세로형 상태 줄 누락을 검사에서 발견해 수정했다.
+- 앱 미리보기도 홈 위젯과 동일한 Glance RemoteViews를 사용한다. 미리보기가 실제로 로드되는지 검사한다.
+- 로컬 Gradle은 처음 실행 환경의 소켓 제한으로 실패했고, Mac arm64 에뮬레이터는 부팅 전 SIGILL로 종료됐다. 최종 성공 기록은 GitHub의 Linux 빌드 및 Android 에뮬레이터 결과다.
+- Galaxy S24+·Note9 및 Samsung One UI 실기기 검사, 실제 홈 런처의 추가/삭제/크기 조절 흐름, 시스템 큰 글자 설정, 재부팅·배터리·장시간 주기 갱신은 아직 별도 검증이 필요하다.
+- 설정 저장 검사는 DataStore의 영구 저장과 위젯 ID별 격리를 확인한다. 실제 다중 홈 위젯의 모든 수명주기 검사를 완료했다는 뜻은 아니다.
+
+[APK 및 빌드 보고서](https://github.com/99jinwoo/twilight/actions/runs/37584107269/artifacts/11466127419), [API 29 화면/기록](https://github.com/99jinwoo/twilight/actions/runs/37584107269/artifacts/11465269573), [API 35 화면/기록](https://github.com/99jinwoo/twilight/actions/runs/37584107269/artifacts/11465373012). CI 산출물 보관 만료: 2026-10-21.
 
 ## 아직 구현하지 않은 출시 요구
 
@@ -38,4 +52,4 @@
 
 ## 다음 단계
 
-자동 검사 실패 수정 → 출력 화면 검토 → S24+/Note9 가독성 확인 → 실제 박명 계산과 자료 연결. API 키는 저장소나 대화에 넣지 않고 연결 단계에서 안전한 로컬 입력 경로를 제공한다.
+S24+/Note9 홈화면 가독성·런처 동작 확인 → 실제 박명 계산과 자료 연결 → 캐시·갱신·재부팅 안정화. API 키는 저장소나 대화에 넣지 않고 연결 단계에서 안전한 로컬 입력 경로를 제공한다.
