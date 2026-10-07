@@ -148,13 +148,17 @@ private fun TallContent(model: WidgetPresentation, settings: WidgetSettings) {
         Label(settings.region, settings, 10, muted = true)
         Label("${model.temperature} ${model.weather}", settings, 25, bold = true)
         Spacer(GlanceModifier.height(8.dp))
-        Dust("미", model.pm10, model.pm10Grade, settings, expanded = true)
-        Spacer(GlanceModifier.height(4.dp))
-        Dust("초", model.pm25, model.pm25Grade, settings, expanded = true)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Dust("미", model.pm10, model.pm10Grade, settings, expanded = true)
+            Spacer(GlanceModifier.height(4.dp))
+            Dust("초", model.pm25, model.pm25Grade, settings, expanded = true)
+        }
         Spacer(GlanceModifier.height(10.dp))
-        Label(model.eventName, settings, 11, muted = true)
-        Label(model.eventTime, settings, 21, bold = true)
-        Label("박명 ${model.eventDate}", settings, 9, muted = true)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Label(model.eventName, settings, 11, muted = true)
+            Label(model.eventTime, settings, 21, bold = true)
+            Label("박명 ${model.eventDate}", settings, 9, muted = true)
+        }
         Spacer(GlanceModifier.height(8.dp))
         Label(model.status, settings, 9, muted = true)
     }
