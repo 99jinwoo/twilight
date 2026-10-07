@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.compose.runtime.*
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import com.jinwoo.twilightandyou.data.SettingsStore
@@ -20,7 +21,10 @@ import kotlinx.coroutines.CancellationException
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         val requestedId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0)
         val id = requestedId.takeIf { it in widgetIds(this) } ?: 0
         setContent {
@@ -76,7 +80,10 @@ class MainActivity : ComponentActivity() {
 class WidgetConfigurationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         setResult(RESULT_CANCELED)
         if (id == AppWidgetManager.INVALID_APPWIDGET_ID || id !in widgetIds(this)) { finish(); return }

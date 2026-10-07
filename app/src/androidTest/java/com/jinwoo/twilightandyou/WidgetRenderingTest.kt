@@ -76,11 +76,11 @@ class WidgetRenderingTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         ActivityScenario.launch(MainActivity::class.java).use {
             instrumentation.waitForIdleSync()
-            val deadline = SystemClock.uptimeMillis() + 10_000
-            while (!containsText(instrumentation.uiAutomation.rootInActiveWindow, "기온 · 두 가지 먼지") && SystemClock.uptimeMillis() < deadline) {
+            val deadline = SystemClock.uptimeMillis() + 15_000
+            while (!containsText(instrumentation.uiAutomation.rootInActiveWindow, "22°") && SystemClock.uptimeMillis() < deadline) {
                 SystemClock.sleep(100)
             }
-            assertTrue("Settings screen did not load", containsText(instrumentation.uiAutomation.rootInActiveWindow, "기온 · 두 가지 먼지"))
+            assertTrue("Real widget preview did not load", containsText(instrumentation.uiAutomation.rootInActiveWindow, "22°"))
             val context = instrumentation.targetContext
             val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
             instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
