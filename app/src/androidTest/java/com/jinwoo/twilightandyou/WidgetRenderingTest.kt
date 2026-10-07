@@ -26,16 +26,17 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.time.ZonedDateTime
 
 @RunWith(AndroidJUnit4::class)
 class WidgetRenderingTest {
-    @Test fun actualRemoteViewsContainAllRequiredFieldsAtThreeSizes() = runBlocking {
+    @Test fun actualRemoteViewsKeepBothTwilightsAndForecastsWithoutClipping() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 112 to 228)
+        val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 112 to 228, 56 to 160)
         for ((width, height) in sizes) {
             val remoteViews = withTimeout(30_000) {
-                TwilightWidget(WidgetSettings(showSample = true)).compose(context, size = DpSize(width.dp, height.dp))
+                TwilightWidget(WidgetSettings(showSample = true), ZonedDateTime.parse("2026-10-07T17:00:00+09:00")).compose(context, size = DpSize(width.dp, height.dp))
             }
                 instrumentation.runOnMainSync {
                     val parent = FrameLayout(context)
@@ -54,9 +55,25 @@ class WidgetRenderingTest {
                     val texts = descendants(view).filterIsInstance<TextView>()
                     val combined = texts.joinToString(" ") { it.text.toString() }
                     assertTrue(combined, combined.contains("22°") && combined.contains("☀"))
-                    assertTrue(combined, combined.contains("미") && combined.contains("초"))
+                    assertTrue(combined, combined.contains("미") && combined.contains("초미"))
                     assertTrue(combined, combined.contains("EENT") && combined.contains("18:54"))
-                    assertTrue(combined, combined.contains("샘플"))
+                    assertTrue(combined, combined.contains("오늘 EENT 18:54") && combined.contains("오늘 BMNT 05:38"))
+                    assertFalse(combined, combined.contains("샘플") || combined.contains("17시"))
+                    val upcoming = texts.first { it.text.toString() == "오늘 EENT 18:54" }
+                    val previous = texts.first { it.text.toString() == "오늘 BMNT 05:38" }
+                    val upcomingBounds = Rect().also { upcoming.getDrawingRect(it) }
+                    val previousBounds = Rect().also { previous.getDrawingRect(it) }
+                    (view as ViewGroup).offsetDescendantRectToMyCoords(upcoming, upcomingBounds)
+                    view.offsetDescendantRectToMyCoords(previous, previousBounds)
+                    assertTrue("Next twilight must be above previous", upcomingBounds.bottom <= previousBounds.top)
+                    assertTrue("Next twilight should be bold", upcoming.typeface.isBold)
+                    assertNotEquals(upcoming.currentTextColor, previous.currentTextColor)
+                    val shape = WidgetShape.forSize(width.toFloat(), height.toFloat())
+                    if (shape != WidgetShape.COMPACT) {
+                        assertTrue(combined, combined.contains("시간별 예보"))
+                        assertTrue(combined, combined.contains("18시") && combined.contains("21°"))
+                        if (width != 140) assertTrue(combined, combined.contains("21시") && combined.contains("18°"))
+                    }
                     for (text in texts.filter { it.text.isNotEmpty() }) {
                         val bounds = Rect().also { text.getDrawingRect(it) }
                         (view as ViewGroup).offsetDescendantRectToMyCoords(text, bounds)

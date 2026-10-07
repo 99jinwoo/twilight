@@ -20,7 +20,10 @@ import com.jinwoo.twilightandyou.R
 import com.jinwoo.twilightandyou.data.SettingsStore
 import com.jinwoo.twilightandyou.model.*
 
-class TwilightWidget(private val previewSettings: WidgetSettings? = null) : GlanceAppWidget() {
+class TwilightWidget(
+    private val previewSettings: WidgetSettings? = null,
+    private val previewTime: java.time.ZonedDateTime? = null
+) : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun onDelete(context: Context, glanceId: GlanceId) {
@@ -31,7 +34,7 @@ class TwilightWidget(private val previewSettings: WidgetSettings? = null) : Glan
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         val settings = previewSettings ?: SettingsStore(context).read(widgetId)
-        val model = WidgetPresentation.from(settings)
+        val model = WidgetPresentation.from(settings, previewTime ?: java.time.ZonedDateTime.now(SEOUL))
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             .setData(android.net.Uri.parse("twilight://widget/$widgetId"))
@@ -39,21 +42,24 @@ class TwilightWidget(private val previewSettings: WidgetSettings? = null) : Glan
             val size = LocalSize.current
             val shape = WidgetShape.forSize(size.width.value, size.height.value)
             val tint = Color(settings.palette.background).copy(alpha = settings.opacity / 100f)
-            Box(
-                modifier = GlanceModifier.fillMaxSize()
-                    .background(ImageProvider(R.drawable.widget_background), colorFilter = ColorFilter.tint(ColorProvider(tint)))
-                    .appWidgetBackground()
-                    .let { if (previewSettings == null) it.clickable(actionStartActivity(intent)) else it }
-                    .padding(if (shape == WidgetShape.COMPACT || size.height.value < 96f) 4.dp else 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                when (shape) {
-                    WidgetShape.COMPACT -> {
-                        val fit = minOf(size.width.value / 96f, size.height.value / 112f).coerceIn(0.55f, 1f)
-                        CompactContent(model, settings.copy(fontScale = minOf(settings.fontScale, fit * 1.15f)))
+            // Keep the launcher's cell; make only the compact card visibly smaller.
+            val cardWidth = if (shape == WidgetShape.COMPACT) minOf(size.width.value, 88f) else size.width.value
+            val cardHeight = if (shape == WidgetShape.COMPACT) minOf(size.height.value, 90f) else size.height.value
+            Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = GlanceModifier.size(cardWidth.dp, cardHeight.dp)
+                        .background(ImageProvider(R.drawable.widget_background), colorFilter = ColorFilter.tint(ColorProvider(tint)))
+                        .appWidgetBackground()
+                        .let { if (previewSettings == null) it.clickable(actionStartActivity(intent)) else it }
+                        .padding(if (shape == WidgetShape.COMPACT || size.height.value < 96f) 4.dp else 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (shape) {
+                        WidgetShape.COMPACT -> CurrentContent(model,
+                            settings.copy(fontScale = minOf(settings.fontScale, (cardWidth - 8f) / 80f)), false)
+                        WidgetShape.WIDE -> WideContent(model, settings, size.width.value)
+                        WidgetShape.TALL -> TallContent(model, settings, size.width.value)
                     }
-                    WidgetShape.WIDE -> WideContent(model, settings.copy(fontScale = minOf(settings.fontScale, size.width.value / 224f * 1.15f)), size.width.value >= 200f)
-                    WidgetShape.TALL -> TallContent(model, settings.copy(fontScale = minOf(settings.fontScale, size.width.value / 112f * 1.15f)))
                 }
             }
         }
@@ -74,93 +80,96 @@ private fun Label(text: String, settings: WidgetSettings, size: Int = 11, muted:
 }
 
 @Composable
-private fun Dust(label: String, value: Int?, grade: DustGrade, settings: WidgetSettings, expanded: Boolean = false) {
+private fun Dust(label: String, value: Int?, grade: DustGrade, settings: WidgetSettings) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Label(label, settings, 10)
-        Spacer(GlanceModifier.width(3.dp))
+        Spacer(GlanceModifier.width(2.dp))
         Image(
             provider = ImageProvider(R.drawable.dust_dot),
-            contentDescription = "$label ${grade.title}, ${value?.let { "$it 마이크로그램 매 세제곱미터" } ?: "자료 없음"}",
-            modifier = GlanceModifier.size(9.dp),
+            contentDescription = "${if (label == "미") "미세먼지" else "초미세먼지"} ${grade.title}, ${value?.let { "$it 마이크로그램 매 세제곱미터" } ?: "자료 없음"}",
+            modifier = GlanceModifier.size((8 * settings.fontScale).dp),
             colorFilter = ColorFilter.tint(ColorProvider(Color(grade.argb)))
         )
-        if (expanded) {
-            Spacer(GlanceModifier.width(3.dp))
-            Label(value?.toString() ?: "—", settings, 11)
-        }
     }
 }
 
 @Composable
-private fun DustRow(model: WidgetPresentation, settings: WidgetSettings, expanded: Boolean = false, spacing: Int = 8) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Dust("미", model.pm10, model.pm10Grade, settings, expanded)
-        Spacer(GlanceModifier.width(spacing.dp))
-        Dust("초", model.pm25, model.pm25Grade, settings, expanded)
-    }
-}
-
-@Composable
-private fun CompactContent(model: WidgetPresentation, settings: WidgetSettings) {
+private fun CurrentContent(model: WidgetPresentation, settings: WidgetSettings, showRegion: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
+        if (showRegion) Label(settings.region, settings, 9, muted = true)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Label(model.temperature, settings, 23, bold = true)
             Spacer(GlanceModifier.width(2.dp))
             Label(model.weather, settings, 19)
         }
-        Spacer(GlanceModifier.height(1.dp))
-        DustRow(model, settings, spacing = 4)
-        Spacer(GlanceModifier.height(2.dp))
-        val shortName = when (model.eventName) {
-            "시민 아침" -> "시민↑"; "시민 저녁" -> "시민↓"
-            "천문 아침" -> "천문↑"; "천문 저녁" -> "천문↓"
-            else -> model.eventName
-        }
-        Label("$shortName ${model.eventTime}", settings, 10, bold = true)
-        Spacer(GlanceModifier.height(1.dp))
-        Label(if (model.isSample) "샘플 17시" else "미연결", settings, 8, muted = true)
-    }
-}
-
-@Composable
-private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, showConcentrations: Boolean) {
-    Column(verticalAlignment = Alignment.CenterVertically) {
-        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = GlanceModifier.defaultWeight()) {
-                Label(settings.region, settings, 9, muted = true)
-                Label("${model.temperature} ${model.weather}", settings, 24, bold = true)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                DustRow(model, settings, expanded = showConcentrations)
-                Spacer(GlanceModifier.height(5.dp))
-                Label(model.eventName, settings, 9, muted = true)
-                Label(model.eventTime, settings, 16, bold = true)
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Dust("미", model.pm10, model.pm10Grade, settings)
+            Spacer(GlanceModifier.width(5.dp))
+            Dust("초미", model.pm25, model.pm25Grade, settings)
         }
         Spacer(GlanceModifier.height(3.dp))
-        Label("${model.status} · 박명 ${model.eventDate}", settings, 8, muted = true)
+        Label(model.nextLabel, settings, 9, bold = true)
+        Spacer(GlanceModifier.height(1.dp))
+        Label(model.previousLabel, settings, 8, muted = true)
     }
 }
 
 @Composable
-private fun TallContent(model: WidgetPresentation, settings: WidgetSettings) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
-        Label(settings.region, settings, 10, muted = true)
-        Label("${model.temperature} ${model.weather}", settings, 25, bold = true)
-        Spacer(GlanceModifier.height(8.dp))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Dust("미", model.pm10, model.pm10Grade, settings, expanded = true)
+private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, width: Float) {
+    val narrow = width < 210f
+    val leftWidth = if (narrow) 59f else 84f
+    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow) 0.70f else 1f))
+    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow) 0.8f else 1f))
+    Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+        Box(GlanceModifier.width(leftWidth.dp), contentAlignment = Alignment.Center) {
+            CurrentContent(model, currentSettings, true)
+        }
+        Spacer(GlanceModifier.width(5.dp))
+        Box(GlanceModifier.width(1.dp).height(52.dp).background(ColorProvider(Color(settings.palette.muted).copy(alpha = 0.25f)))) {}
+        Spacer(GlanceModifier.width(5.dp))
+        Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Label("시간별 예보", forecastSettings, 8, muted = true)
             Spacer(GlanceModifier.height(4.dp))
-            Dust("초", model.pm25, model.pm25Grade, settings, expanded = true)
+            if (model.hourly.isEmpty()) {
+                Label("미연결", forecastSettings, 10, muted = true)
+            } else Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                model.hourly.take(if (width >= 210f) 4 else if (width >= 170f) 3 else 2).forEach { hour ->
+                    Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Label(relativeDay(hour.at.toLocalDate(), model.today), forecastSettings, 7, muted = true)
+                        Label(hour.hour, forecastSettings, 9, muted = true)
+                        Label(hour.weather, forecastSettings, 17)
+                        Label(hour.temperature, forecastSettings, 11, bold = true)
+                    }
+                }
+            }
         }
-        Spacer(GlanceModifier.height(10.dp))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Label(model.eventName, settings, 11, muted = true)
-            Label(model.eventTime, settings, 21, bold = true)
-            Label("박명 ${model.eventDate}", settings, 9, muted = true)
+    }
+}
+
+@Composable
+private fun TallContent(model: WidgetPresentation, settings: WidgetSettings, width: Float) {
+    val fit = minOf(settings.fontScale, ((width - 12f) / 80f).coerceAtMost(1f))
+    val fitted = settings.copy(fontScale = fit)
+    Column(GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
+        CurrentContent(model, fitted, true)
+        Spacer(GlanceModifier.height(5.dp))
+        Box(GlanceModifier.fillMaxWidth().height(1.dp).background(ColorProvider(Color(settings.palette.muted).copy(alpha = 0.25f)))) {}
+        Spacer(GlanceModifier.height(5.dp))
+        Label("시간별 예보", fitted, 8, muted = true)
+        if (model.hourly.isEmpty()) {
+            Label("미연결", fitted, 10, muted = true)
+        } else Column(GlanceModifier.fillMaxWidth()) {
+            model.hourly.take(4).forEach { hour ->
+                Row(GlanceModifier.fillMaxWidth().height((22f * fit.coerceAtLeast(0.7f)).dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(GlanceModifier.defaultWeight()) {
+                        Label("${relativeDay(hour.at.toLocalDate(), model.today)} ${hour.hour}", fitted, 9, muted = true)
+                    }
+                    Label(hour.weather, fitted, 16)
+                    Spacer(GlanceModifier.width(5.dp))
+                    Label(hour.temperature, fitted, 11, bold = true)
+                }
+            }
         }
-        Spacer(GlanceModifier.height(8.dp))
-        Label(model.status, settings, 9, muted = true)
     }
 }
 

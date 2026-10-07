@@ -75,7 +75,7 @@ fun TwilightScreen(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("TWILIGHT / AND YOU", fontSize = 11.sp, letterSpacing = 2.sp, color = Peach, fontWeight = FontWeight.Bold)
-                Text("PREVIEW 01", fontSize = 9.sp, letterSpacing = 1.sp, color = Muted)
+                Text("PREVIEW 02", fontSize = 9.sp, letterSpacing = 1.sp, color = Muted)
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(if (editingWidget) "나의 위젯을\n다듬는 시간." else "날씨와 빛,\n나의 작은 창.", fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.SemiBold)
@@ -96,7 +96,7 @@ fun TwilightScreen(
                     Text("샘플 화면 · 실제 날씨가 아닙니다", color = Color(0xFFFDF0E8), fontSize = 10.sp,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp))
                 }
-                Text("미 = 미세먼지   초 = 초미세먼지", color = Muted, fontSize = 11.sp)
+                Text("미 = 미세먼지   초미 = 초미세먼지", color = Muted, fontSize = 11.sp)
                 Text("홈 격자에 따라 실제 크기가 달라집니다. 좁은 칸에서는 글자를 줄여 필수 정보를 유지합니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
             SettingSection("01", "고정 지역") {
@@ -105,8 +105,7 @@ fun TwilightScreen(
             }
             SettingSection("02", "지정 박명") {
                 ChoiceRow(TwilightKind.entries, settings.twilight, { it.title }) { onChange(settings.copy(twilight = it)) }
-                ChoiceRow(EventMode.entries, settings.eventMode, { it.title }) { onChange(settings.copy(eventMode = it)) }
-                Text("샘플 시각은 10월 7일 17시 상황입니다. 다음 박명은 저녁 시각을 보여 줍니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                Text("다음 박명을 굵게 위에, 직전 박명을 작게 아래에 표시합니다. 어제·오늘·내일은 한국 시간을 기준으로 바뀝니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
             SettingSection("03", "나의 색과 크기") {
                 ChoiceRow(WidgetPalette.entries, settings.palette, { it.title }) { onChange(settings.copy(palette = it)) }
@@ -120,11 +119,11 @@ fun TwilightScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("홈 위젯에도 샘플 표시", fontSize = 14.sp)
-                        Text("끄면 미연결 상태로 표시합니다.", color = Muted, fontSize = 11.sp)
+                        Text("배치 확인용 가상 값입니다. 끄면 빈 값으로 표시합니다.", color = Muted, fontSize = 11.sp)
                     }
                     Switch(checked = settings.showSample, onCheckedChange = { onChange(settings.copy(showSample = it)) })
                 }
-                Text("관측 · 예보 연결 전\n실측 자료가 없는 칸을 예보나 샘플로 채우지 않습니다.", color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
+                Text("관측 · 예보 연결 전\n기온·먼지·시간별 예보·박명 시각은 모두 샘플입니다. 박명 순서와 날짜만 현재 한국 시간에 맞춰 선택합니다.", color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
                 if (onPin != null) Button(onClick = { onPin(shape) }, modifier = Modifier.fillMaxWidth().height(50.dp), enabled = !busy) {
                     Text("${shape.title} 홈화면에 추가", fontWeight = FontWeight.Bold)
                 }
