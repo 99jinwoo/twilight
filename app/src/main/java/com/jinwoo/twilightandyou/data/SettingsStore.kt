@@ -26,7 +26,8 @@ class SettingsStore(context: Context) {
             latitude = p[doublePreferencesKey(prefix + "latitude")],
             longitude = p[doublePreferencesKey(prefix + "longitude")],
             airArea = p[stringPreferencesKey(prefix + "airArea")],
-            station = p[stringPreferencesKey(prefix + "station")] ?: ""
+            station = p[stringPreferencesKey(prefix + "station")] ?: "",
+            autoLocation = p[booleanPreferencesKey(prefix + "autoLocation")] ?: false
         )
     }
 
@@ -53,6 +54,23 @@ class SettingsStore(context: Context) {
             } else { p.remove(lat); p.remove(lon) }
             if (settings.airArea == null) p.remove(area) else p[area] = settings.airArea
             p[stringPreferencesKey(prefix + "station")] = settings.station.trim().take(60)
+            p[booleanPreferencesKey(prefix + "autoLocation")] = settings.autoLocation
+        }
+    }
+
+    /** Update only location fields of opted-in widgets; preserve unsaved style edits and fixed regions. */
+    suspend fun updateAutomaticLocations(ids: List<Int>, location: WidgetSettings) {
+        dataStore.edit { p ->
+            ids.distinct().forEach { id ->
+                val prefix = "widget_${id}_"
+                if (p[booleanPreferencesKey(prefix + "autoLocation")] == true) {
+                    p[stringPreferencesKey(prefix + "region")] = location.region
+                    location.latitude?.let { p[doublePreferencesKey(prefix + "latitude")] = it }
+                    location.longitude?.let { p[doublePreferencesKey(prefix + "longitude")] = it }
+                    p[stringPreferencesKey(prefix + "airArea")] = location.forecastArea
+                    p[stringPreferencesKey(prefix + "station")] = location.station
+                }
+            }
         }
     }
 

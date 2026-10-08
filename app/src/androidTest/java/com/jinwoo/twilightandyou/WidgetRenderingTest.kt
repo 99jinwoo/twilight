@@ -36,7 +36,7 @@ class WidgetRenderingTest {
     @Test fun actualRemoteViewsKeepBothTwilightsAndForecastsWithoutClipping() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 224 to 72, 112 to 228, 56 to 160)
+        val sizes = listOf(56 to 72, 100 to 112, 130 to 72, 140 to 72, 170 to 96, 224 to 112, 224 to 72, 112 to 228, 56 to 160)
         val failures = mutableListOf<String>()
         for ((width, height) in sizes) {
             val remoteViews = withTimeout(30_000) {
@@ -77,7 +77,7 @@ class WidgetRenderingTest {
                     if (shape != WidgetShape.COMPACT) {
                         assertTrue(combined, combined.contains("시간별 예보"))
                         assertTrue(combined, combined.contains("18시") && combined.contains("21°"))
-                        if (width != 140) assertTrue(combined, combined.contains("21시") && combined.contains("18°"))
+                        assertTrue(combined, combined.contains("21시") && combined.contains("18°"))
                     }
                     for (text in texts.filter { it.text.isNotEmpty() }) {
                         val bounds = Rect().also { text.getDrawingRect(it) }
@@ -107,11 +107,11 @@ class WidgetRenderingTest {
     @Test fun liveForecastBadgeAndCalculatedTwilightFitSmallWidgets() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val now = ZonedDateTime.parse("2026-10-08T17:00:00+09:00")
+        val now = ZonedDateTime.parse("2026-10-08T23:00:00+09:00")
         val snapshot = LiveSnapshot(weather = WeatherObservation(now, 22.0, 0),
             air = AirObservation(now, 42, 12, "", "", "2", "1"),
             forecast = (0L..4L).map { WeatherForecast(now.plusHours(it), 21.0 - it, 1, 0) }, forecastIssuedAt = now.minusHours(3))
-        for ((width, height) in listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 112 to 228)) {
+        for ((width, height) in listOf(56 to 72, 100 to 112, 130 to 72, 140 to 72, 170 to 96, 224 to 112, 112 to 228)) {
             val remoteViews = withTimeout(30_000) {
                 TwilightWidget(WidgetSettings(), now, snapshot).compose(context, size = DpSize(width.dp, height.dp))
             }
@@ -130,6 +130,10 @@ class WidgetRenderingTest {
                 val texts = descendants(view).filterIsInstance<TextView>()
                 assertTrue(texts.any { it.text.toString() == "예" })
                 assertTrue(texts.any { it.text.contains("오늘 EENT") })
+                if (WidgetShape.forSize(width.toFloat(), height.toFloat()) == WidgetShape.WIDE) {
+                    assertTrue("All four future hours must remain visible", texts.any { it.text.contains("03시") })
+                    assertTrue(texts.any { it.text.contains("내일") })
+                }
                 for (text in texts.filter { it.text.isNotEmpty() }) {
                     val bounds = Rect().also { text.getDrawingRect(it) }
                     (view as ViewGroup).offsetDescendantRectToMyCoords(text, bounds)

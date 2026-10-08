@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 class AirStationFlowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    @Test fun selectingNearestStationFetchesObservationWithoutAnotherRefreshTap() = runBlocking {
+    @Test fun selectingNearestStationFetchesObservationWithoutAnotherRefreshTap(): Unit = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val requestedStation = AtomicReference<String?>(null)
         val now = ZonedDateTime.parse("2026-10-08T12:30:00+09:00")

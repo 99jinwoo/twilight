@@ -14,13 +14,21 @@ class SettingsStoreTest {
     @Test fun settingsSurviveRepositoryRecreationAndRemainIsolated() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val first = SettingsStore(context)
-        val a = WidgetSettings(region = "부산", twilight = TwilightKind.CIVIL, showSample = true)
+        val a = WidgetSettings(region = "부산", twilight = TwilightKind.CIVIL, showSample = true, autoLocation = true)
         val b = WidgetSettings(region = "강릉", palette = WidgetPalette.DAWN, eventMode = EventMode.MORNING)
         try {
             first.save(7001, a)
             first.save(70010, b)
             val recreated = SettingsStore(context)
             assertEquals(a, recreated.read(7001))
+            assertEquals(b, recreated.read(70010))
+            val moved = WidgetSettings(region = "현재 위치", latitude = 37.5665, longitude = 126.9780,
+                airArea = "서울", station = "종로구", autoLocation = true)
+            recreated.updateAutomaticLocations(listOf(7001, 70010), moved)
+            assertEquals(moved.point, recreated.read(7001).point)
+            assertEquals("종로구", recreated.read(7001).station)
+            assertEquals(a.twilight, recreated.read(7001).twilight)
+            assertTrue(recreated.read(7001).showSample)
             assertEquals(b, recreated.read(70010))
             recreated.delete(7001)
             assertFalse(recreated.isConfigured(7001))

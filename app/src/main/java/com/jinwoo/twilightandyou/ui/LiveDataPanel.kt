@@ -2,6 +2,14 @@ package com.jinwoo.twilightandyou.ui
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
+import com.jinwoo.twilightandyou.widget.widgetIds
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,7 +41,8 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, onUpdated: () -> Unit,
-    dataRepository: LiveRepository? = null) {
+    dataRepository: LiveRepository? = null,
+    automaticLocator: (suspend (WidgetSettings) -> LocationUpdate)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(context, dataRepository) { dataRepository ?: LiveRepository(context) }
@@ -53,21 +62,59 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         catch (e: CancellationException) { throw e }
         catch (_: Exception) { message = "연결 정보를 읽지 못했습니다. API 연결에서 키를 다시 저장해주세요." }
     }
-    fun refresh(target: WidgetSettings = settings) {
-        scope.launch {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var refreshJob by remember { mutableStateOf<Job?>(null) }
+    val latestOnChange by rememberUpdatedState(onChange)
+    suspend fun refreshData(requested: WidgetSettings, locate: Boolean) {
+            if (busy) return
+            var target = requested
             busy = true; message = null
             try {
+                var locationMessage: String? = null
+                if (locate && requested.autoLocation) {
+                    val update = automaticLocator?.invoke(requested) ?: resolveAutomaticLocation(requested, locate = {
+                        val allowed = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
+                            .any { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+                        if (allowed) currentCoordinates(context) else null
+                    }, describe = { describeCoordinates(context, it) }, stations = { repository.nearestStations(it) })
+                    // Discard a result if the user changed location/mode while the request was running.
+                    if (latestSettings.point != requested.point || latestSettings.autoLocation != requested.autoLocation ||
+                        latestSettings.station != requested.station || latestSettings.forecastArea != requested.forecastArea) return
+                    locationMessage = update.message
+                    if (update.located) {
+                        target = latestSettings.copy(region = update.settings.region, latitude = update.settings.latitude,
+                            longitude = update.settings.longitude, airArea = update.settings.airArea, station = update.settings.station)
+                        latestOnChange(target)
+                        SettingsStore(context).updateAutomaticLocations(widgetIds(context).toList() + 0, target)
+                        data = LiveSnapshot()
+                    }
+                }
                 val refreshed = repository.refresh(target, manual = true)
                 // This coroutine belongs to the currently displayed location, not an earlier draft.
                 if (latestSettings.point == target.point && latestSettings.station == target.station && latestSettings.forecastArea == target.forecastArea) {
                     data = refreshed
                     onUpdated()
-                    message = "저장된 지역의 자료를 확인했습니다. 항목별 상태와 기준 시각을 확인해주세요."
+                    message = locationMessage ?: "저장된 지역의 자료를 확인했습니다. 항목별 상태와 기준 시각을 확인해주세요."
                 }
                 TwilightWidget().updateAll(context)
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { message = "자료를 확인하지 못했습니다. 연결 설정을 확인해주세요." }
             finally { busy = false }
+    }
+    fun refresh(target: WidgetSettings = settings, locate: Boolean = true) {
+        if (!busy) refreshJob = scope.launch { refreshData(target, locate) }
+    }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) refreshJob?.cancel()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); refreshJob?.cancel() }
+    }
+    LaunchedEffect(lifecycle, settings.autoLocation) {
+        if (settings.autoLocation) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            refreshData(latestSettings, locate = true)
+            awaitCancellation()
         }
     }
     fun applyStation(name: String) {
@@ -75,7 +122,7 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         onChange(target)
         stations = emptyList()
         stationMessage = "${target.station} 측정소를 적용하고 자료를 조회합니다."
-        refresh(target)
+        refresh(target, locate = false)
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("실제 자료", style = MaterialTheme.typography.titleMedium)
@@ -242,16 +289,29 @@ fun ManualRegionSettings(settings: WidgetSettings, onChange: (WidgetSettings) ->
             finally { busy = false }
         }
     }
+    var enableAutomatic by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if (result.values.any { it }) locate() else message = "위치 권한이 없어 기존 지역을 유지합니다."
+        if (result.values.any { it }) {
+            if (enableAutomatic) onChange(latestSettings.copy(autoLocation = true)) else locate()
+        } else message = "위치 권한이 없어 기존 지역을 유지합니다."
+        enableAutomatic = false
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("앱 실행·새로고침 때 현재 위치", modifier = Modifier.weight(1f), fontSize = 13.sp)
+            Switch(checked = settings.autoLocation, onCheckedChange = { enabled ->
+                if (enabled) {
+                    enableAutomatic = true
+                    permission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+                } else onChange(latestSettings.copy(autoLocation = false))
+            })
+        }
         settings.point?.let { Text("${settings.region} · ${"%.4f, %.4f".format(it.latitude, it.longitude)}\n먼지 예보권역: ${settings.forecastArea.ifBlank { "선택 필요" }}", fontSize = 11.sp) }
         Row {
-            TextButton(onClick = { permission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)) }, enabled = !busy) { Text(if (busy) "위치 확인 중…" else "현재 위치 한 번 확인") }
+            TextButton(onClick = { enableAutomatic = false; permission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)) }, enabled = !busy) { Text(if (busy) "위치 확인 중…" else "현재 위치 한 번 확인") }
             TextButton(onClick = { locatedDraft = null; editor = true }, enabled = !busy) { Text("직접 지정") }
         }
-        Text("확인한 위치는 고정해서 사용합니다. 이동 중에는 자동으로 추적하지 않습니다.", fontSize = 11.sp)
+        Text(if (settings.autoLocation) "앱을 열거나 새로고침할 때 위치와 가까운 측정소를 갱신합니다. 앱을 닫으면 마지막 위치를 사용합니다." else "고정 지역을 사용합니다. 위 옵션을 켜면 앱 실행·새로고침 때 현재 위치로 바뀝니다.", fontSize = 11.sp)
         if (message != null) Text(message!!, fontSize = 11.sp)
     }
     if (editor) RegionDialog(locatedDraft ?: settings, onDismiss = { editor = false; locatedDraft = null }, onApply = { onChange(it); editor = false; locatedDraft = null })
@@ -279,7 +339,7 @@ private fun RegionDialog(settings: WidgetSettings, onDismiss: () -> Unit, onAppl
             }
             Text("좌표와 예보권역을 확인해주세요. 먼지 관측 측정소는 실제 자료에서 별도로 고릅니다.", fontSize = 11.sp)
         }
-    }, confirmButton = { TextButton(onClick = { onApply(settings.copy(region = name.trim(), latitude = point!!.latitude, longitude = point.longitude, airArea = area, station = "")) }, enabled = valid) { Text("이 지역 적용") } },
+    }, confirmButton = { TextButton(onClick = { onApply(settings.copy(region = name.trim(), latitude = point!!.latitude, longitude = point.longitude, airArea = area, station = "", autoLocation = false)) }, enabled = valid) { Text("이 지역 적용") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } })
 }
 

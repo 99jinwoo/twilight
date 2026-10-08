@@ -16,7 +16,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 
-/** Called only by the user's one-time location button. No background subscription. */
+/** One-shot foreground request. Callers cancel when the screen stops; no background subscription. */
 @SuppressLint("MissingPermission")
 suspend fun currentCoordinates(context: Context): Coordinates? = withTimeout(20_000) {
     val manager = context.getSystemService(LocationManager::class.java)

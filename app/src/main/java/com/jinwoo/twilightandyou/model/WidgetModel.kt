@@ -57,7 +57,8 @@ data class WidgetSettings(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val airArea: String? = null,
-    val station: String = ""
+    val station: String = "",
+    val autoLocation: Boolean = false
 ) {
     val point: Coordinates? get() {
         val lat = latitude

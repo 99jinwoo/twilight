@@ -139,11 +139,22 @@ private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, wid
         Spacer(GlanceModifier.width(5.dp))
         Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
             Label("시간별 예보", forecastSettings, 8, muted = true)
-            Spacer(GlanceModifier.height(4.dp))
+            Spacer(GlanceModifier.height(if (narrow) 1.dp else 4.dp))
             if (model.hourly.isEmpty()) {
                 Label("미연결", forecastSettings, 10, muted = true)
+            } else if (narrow) {
+                // Four compact rows fit narrow launcher cells without shrinking the current conditions.
+                model.hourly.take(4).forEach { hour ->
+                    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Label("${if (hour.at.toLocalDate() == model.today) "" else "내일 "}${hour.hour}", forecastSettings, 8, muted = true)
+                        Spacer(GlanceModifier.defaultWeight())
+                        Label(hour.weather, forecastSettings, 11)
+                        Spacer(GlanceModifier.width(2.dp))
+                        Label(hour.temperature, forecastSettings, 9, bold = true)
+                    }
+                }
             } else Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                model.hourly.take(if (width >= 210f) 4 else if (width >= 170f) 3 else 2).forEach { hour ->
+                model.hourly.take(4).forEach { hour ->
                     Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Label(relativeDay(hour.at.toLocalDate(), model.today), forecastSettings, 7, muted = true)
                         Label(hour.hour, forecastSettings, 9, muted = true)

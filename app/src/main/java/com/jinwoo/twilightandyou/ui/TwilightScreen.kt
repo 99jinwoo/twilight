@@ -101,8 +101,8 @@ fun TwilightScreen(
                 Text("홈 격자에 따라 실제 크기가 달라집니다. 좁은 칸에서는 글자를 줄여 필수 정보를 유지합니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
             LiveDataPanel(settings, onChange, onUpdated = { revision++ })
-            SettingSection("01", "고정 지역") {
-                ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it, latitude = null, longitude = null, airArea = null, station = "")) }
+            SettingSection("01", "지역과 위치") {
+                ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it, latitude = null, longitude = null, airArea = null, station = "", autoLocation = false)) }
                 ManualRegionSettings(settings, onChange)
             }
             SettingSection("02", "지정 박명") {
