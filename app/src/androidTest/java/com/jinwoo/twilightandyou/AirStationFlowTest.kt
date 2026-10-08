@@ -1,8 +1,13 @@
 package com.jinwoo.twilightandyou
 
+import android.graphics.Bitmap
+import java.io.File
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import android.content.Context
 import android.os.SystemClock
-import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,10 +15,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.jinwoo.twilightandyou.data.*
 import com.jinwoo.twilightandyou.data.remote.*
 import com.jinwoo.twilightandyou.model.*
@@ -21,12 +28,14 @@ import com.jinwoo.twilightandyou.ui.*
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(AndroidJUnit4::class)
 class AirStationFlowTest {
+    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     @Test fun selectingNearestStationFetchesObservationWithoutAnotherRefreshTap() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val requestedStation = AtomicReference<String?>(null)
@@ -47,54 +56,43 @@ class AirStationFlowTest {
         try {
             repository.clearCache()
             ApiKeyStore(context).save(ApiKeys(air = "synthetic-flow-key"))
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                scenario.onActivity { activity ->
-                    activity.setContent {
-                        var settings by remember { mutableStateOf(WidgetSettings()) }
-                        TwilightTheme {
-                            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                                LiveDataPanel(settings, { settings = it }, onUpdated = {}, dataRepository = repository)
-                            }
+            compose.activityRule.scenario.onActivity { activity ->
+                activity.setContent {
+                    var settings by remember { mutableStateOf(WidgetSettings()) }
+                    TwilightTheme {
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                            LiveDataPanel(settings, { settings = it }, onUpdated = {}, dataRepository = repository)
                         }
                     }
                 }
-                clickText("가까운 측정소 찾기")
-                clickText("종로구 ·")
-                val deadline = SystemClock.uptimeMillis() + 10_000
-                while (requestedStation.get() == null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
-                assertEquals("Selecting a station must immediately query that station", "종로구", requestedStation.get())
-                var saved: LiveSnapshot
-                do {
-                    saved = repository.cached(WidgetSettings(station = "종로구"))
-                    if (saved.air != null) break
-                    SystemClock.sleep(100)
-                } while (SystemClock.uptimeMillis() < deadline)
-                assertEquals(42, saved.air!!.pm10)
-                assertEquals(12, saved.air!!.pm25)
             }
-        } finally { ApiKeyStore(context).clear(); repository.clearCache() }
-    }
-
-    private fun clickText(text: String) {
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = SystemClock.uptimeMillis() + 10_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            val root = automation.rootInActiveWindow
-            var node = find(root) { it.isVisibleToUser && it.text?.contains(text) == true }
-            if (node != null) {
-                while (node != null && !node.isClickable) node = node.parent
-                if (node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
+            compose.onNodeWithText("가까운 측정소 찾기").performScrollTo().performClick()
+            compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("종로구 ·", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("종로구 ·", substring = true).performScrollTo().performClick()
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            while (requestedStation.get() == null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
+            assertEquals("Selecting a station must immediately query that station", "종로구", requestedStation.get())
+            var saved: LiveSnapshot
+            do {
+                saved = repository.cached(WidgetSettings(station = "종로구"))
+                if (saved.air != null) break
+                SystemClock.sleep(100)
+            } while (SystemClock.uptimeMillis() < deadline)
+            assertEquals(42, saved.air!!.pm10)
+            assertEquals(12, saved.air!!.pm25)
+            compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("42 μg/m³", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("42 μg/m³", substring = true).performScrollTo().assertIsDisplayed()
+        } catch (failure: Throwable) {
+            println(compose.onRoot().printToString())
+            throw failure
+        } finally {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { bitmap ->
+                val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+                File(directory, "air-station-flow.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
             }
-            find(root) { it.isScrollable }?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-            SystemClock.sleep(200)
+            ApiKeyStore(context).clear(); repository.clearCache()
         }
-        fail("Could not click $text")
     }
 
-    private fun find(node: AccessibilityNodeInfo?, match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-        if (node == null) return null
-        if (match(node)) return node
-        for (i in 0 until node.childCount) find(node.getChild(i), match)?.let { return it }
-        return null
-    }
 }
