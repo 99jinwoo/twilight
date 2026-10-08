@@ -145,7 +145,7 @@ private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, wid
             } else if (narrow) {
                 // Four compact rows fit narrow launcher cells without shrinking the current conditions.
                 model.hourly.take(4).forEach { hour ->
-                    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(GlanceModifier.fillMaxWidth().height(if (short) 13.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Label("${if (hour.at.toLocalDate() == model.today) "" else "내일 "}${hour.hour}", forecastSettings, 8, muted = true)
                         Spacer(GlanceModifier.defaultWeight())
                         Label(hour.weather, forecastSettings, 11)

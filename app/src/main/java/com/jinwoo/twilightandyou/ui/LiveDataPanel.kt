@@ -157,7 +157,8 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         HorizontalDivider()
         Text("에어코리아 실측", style = MaterialTheme.typography.titleSmall)
         Text("가까운 측정소 목록에서 선택하면 바로 조회합니다. 직접 입력할 때는 시·군 이름이 아닌 정확한 측정소 이름을 사용해주세요.", fontSize = 11.sp)
-        OutlinedTextField(stationText, { stationText = it.take(60) }, label = { Text("고정 측정소 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (settings.autoLocation) Text("현재 위치 모드에서는 다음 위치 갱신 때 가까운 측정소를 다시 선택합니다.", fontSize = 11.sp)
+        OutlinedTextField(stationText, { stationText = it.take(60) }, label = { Text("선택한 측정소 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { applyStation(stationText) }, enabled = !busy && stationText.isNotBlank()) { Text("적용 후 조회") }
             TextButton(onClick = {

@@ -49,6 +49,7 @@ class AutomaticLocationFlowTest {
                 }
             }
             compose.waitUntil(10_000) { displayed.get()?.region == "시험 위치 1" }
+            compose.waitUntil(10_000) { compose.onAllNodes(hasText("새로고침")).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("새로고침").performScrollTo().performClick()
             compose.waitUntil(10_000) { displayed.get()?.region == "시험 위치 2" }
             compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
@@ -61,6 +62,10 @@ class AutomaticLocationFlowTest {
             compose.waitForIdle()
             assertEquals(fixedCalls, calls.get())
             assertEquals("부산", displayed.get().forecastArea)
+        } catch (failure: Throwable) {
+            println("Location test: calls=${calls.get()}, displayed=${displayed.get()}, lifecycle=${compose.activity.lifecycle.currentState}")
+            println(compose.onRoot().printToString())
+            throw failure
         } finally { repository.clearCache() }
     }
 }
