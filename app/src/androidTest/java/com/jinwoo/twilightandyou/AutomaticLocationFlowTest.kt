@@ -63,9 +63,7 @@ class AutomaticLocationFlowTest {
             assertEquals(fixedCalls, calls.get())
             assertEquals("부산", displayed.get().forecastArea)
         } catch (failure: Throwable) {
-            println("Location test: calls=${calls.get()}, displayed=${displayed.get()}, lifecycle=${compose.activity.lifecycle.currentState}")
-            println(compose.onRoot().printToString())
-            throw failure
+            throw AssertionError("Location test: calls=${calls.get()}, displayed=${displayed.get()}, lifecycle=${compose.activity.lifecycle.currentState}\n${compose.onRoot().printToString()}", failure)
         } finally { repository.clearCache() }
     }
 }
