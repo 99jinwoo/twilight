@@ -17,7 +17,8 @@ import java.time.format.DateTimeFormatter
 
 private data class CachedSource(
     val items: List<JSONObject> = emptyList(), val received: Long = 0, val attempted: Long = 0,
-    val token: String = "", val issued: String = "", val issue: DataProblem? = null
+    val token: String = "", val issued: String = "", val issue: DataProblem? = null,
+    val httpStatus: Int? = null, val providerCode: String? = null
 )
 private data class SourcePlan(val id: String, val title: String, val path: String, val parameters: Map<String,String>,
     val token: String, val issued: ZonedDateTime? = null, val key: String, val fallback: Map<String,String>? = null)
@@ -44,7 +45,9 @@ class LiveRepository(context: Context, private val api: PublicWeatherApi = Publi
                 SourceStatus(plan.title, record?.received?.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).atZone(SEOUL) },
                     if (plan.key.isBlank()) DataProblem.MISSING_KEY
                     else if (plan.path == PublicWeatherApi.AIR && settings.station.isBlank()) DataProblem.STATION_REQUIRED
-                    else record?.issue)
+                    else record?.issue,
+                    attemptedAt = record?.attempted?.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).atZone(SEOUL) },
+                    httpStatus = record?.httpStatus, providerCode = record?.providerCode)
             }
         )
     }
@@ -72,7 +75,7 @@ class LiveRepository(context: Context, private val api: PublicWeatherApi = Publi
                     mapOf("returnType" to "json", "ver" to "1.1"), now.toLocalDate().toString(), key = key)
                 refreshSource(plan, now, manual = false)
                 val record = read(plan.id) ?: throw ApiFailure(DataProblem.NO_DATA)
-                if (record.items.isEmpty()) throw ApiFailure(record.issue ?: DataProblem.NO_DATA)
+                if (record.items.isEmpty()) throw ApiFailure(record.issue ?: DataProblem.NO_DATA, record.httpStatus, record.providerCode)
             }
         }
         return withContext(Dispatchers.IO) { ApiParsers.stations(read("stations-v1.1")?.items.orEmpty()).sortedBy { point.distanceKm(it.point) }.take(5) }
@@ -111,15 +114,15 @@ class LiveRepository(context: Context, private val api: PublicWeatherApi = Publi
             }
             val previousIssued = runCatching { ZonedDateTime.parse(old.issued) }.getOrNull()
             if (issued != null && previousIssued != null && issued.isBefore(previousIssued)) {
-                write(plan.id, old.copy(attempted = nowMillis, issue = DataProblem.NO_DATA))
+                write(plan.id, old.copy(attempted = nowMillis, issue = DataProblem.NO_DATA, httpStatus = null, providerCode = null))
                 return
             }
             // Retry a fallback or a delayed publication at the next allowed refresh.
             val pending = if (used != plan.parameters || (issued != null && plan.issued != null && issued.isBefore(plan.issued))) DataProblem.NO_DATA else null
             write(plan.id, CachedSource(items, nowMillis, nowMillis, plan.token, issued?.toString().orEmpty(), pending))
         } catch (e: CancellationException) { throw e }
-        catch (e: ApiFailure) { write(plan.id, old.copy(attempted = nowMillis, issue = e.problem)) }
-        catch (_: Exception) { write(plan.id, old.copy(attempted = nowMillis, issue = DataProblem.NETWORK)) }
+        catch (e: ApiFailure) { write(plan.id, old.copy(attempted = nowMillis, issue = e.problem, httpStatus = e.httpStatus, providerCode = e.providerCode)) }
+        catch (_: Exception) { write(plan.id, old.copy(attempted = nowMillis, issue = DataProblem.NETWORK, httpStatus = null, providerCode = null)) }
     }
 
     private fun plans(settings: WidgetSettings, now: ZonedDateTime, keys: ApiKeys): List<SourcePlan> {
@@ -156,12 +159,15 @@ class LiveRepository(context: Context, private val api: PublicWeatherApi = Publi
             val json = JSONObject(file(id).openRead().bufferedReader().use { it.readText() })
             val items = json.getJSONArray("items")
             CachedSource((0 until items.length()).map { items.getJSONObject(it) }, json.optLong("received"), json.optLong("attempted"),
-                json.optString("token"), json.optString("issued"), DataProblem.entries.firstOrNull { it.name == json.optString("issue") })
+                json.optString("token"), json.optString("issued"), DataProblem.entries.firstOrNull { it.name == json.optString("issue") },
+                json.optInt("httpStatus").takeIf { it in 100..599 },
+                json.optString("providerCode").takeIf { it.matches(Regex("[0-9]{1,4}")) })
         } catch (_: Exception) { null }
     }
     private fun write(id: String, value: CachedSource) = synchronized(fileLock) {
         val json = JSONObject().put("items", JSONArray(value.items)).put("received", value.received).put("attempted", value.attempted)
             .put("token", value.token).put("issued", value.issued).put("issue", value.issue?.name.orEmpty())
+            .put("httpStatus", value.httpStatus).put("providerCode", value.providerCode)
         val target = file(id)
         val stream = target.startWrite()
         try { stream.write(json.toString().toByteArray()); target.finishWrite(stream) }

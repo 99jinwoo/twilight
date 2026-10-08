@@ -17,11 +17,20 @@ data class AirStation(val name: String, val code: String, val point: Coordinates
 
 enum class DataProblem(val title: String) {
     MISSING_KEY("인증키 미설정"), STATION_REQUIRED("측정소를 선택하세요"), AUTH("키 또는 서비스 승인 상태를 확인하세요"),
-    QUOTA("호출 한도 초과 · 나중에 다시 시도하세요"), NETWORK("연결 실패 · 저장 자료를 표시합니다"),
+    QUOTA("호출 한도 초과 · 나중에 다시 시도하세요"), NETWORK("네트워크 연결 실패"),
+    TIMEOUT("응답 시간 초과 · 잠시 후 다시 시도하세요"), SERVER("공공 API 서버 오류 · 잠시 후 다시 시도하세요"),
+    SECURE_CONNECTION("보안 연결 실패 · 네트워크 상태를 확인하세요"), REQUEST("공공 API 요청이 거부되었습니다"),
     NO_DATA("아직 발표되지 않았거나 자료가 없습니다"), FORMAT("응답 형식을 확인할 수 없습니다")
 }
 
-data class SourceStatus(val name: String, val receivedAt: ZonedDateTime? = null, val issue: DataProblem? = null)
+data class SourceStatus(val name: String, val receivedAt: ZonedDateTime? = null, val issue: DataProblem? = null,
+    val attemptedAt: ZonedDateTime? = null, val httpStatus: Int? = null, val providerCode: String? = null) {
+    fun description(): String {
+        if (issue == null) return if (receivedAt == null) "아직 조회 전 · 새로고침을 눌러주세요" else "수신 완료"
+        val codes = listOfNotNull(httpStatus?.let { "HTTP $it" }, providerCode?.let { "API $it" }).joinToString(" · ")
+        return issue.title + if (codes.isEmpty()) "" else " ($codes)"
+    }
+}
 data class LiveSnapshot(
     val weather: WeatherObservation? = null,
     val forecast: List<WeatherForecast> = emptyList(),

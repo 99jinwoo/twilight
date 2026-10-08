@@ -32,14 +32,16 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, onUpdated: () -> Unit) {
+fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, onUpdated: () -> Unit,
+    dataRepository: LiveRepository? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val repository = remember { LiveRepository(context) }
+    val repository = remember(context, dataRepository) { dataRepository ?: LiveRepository(context) }
     var data by remember { mutableStateOf(LiveSnapshot()) }
     var busy by remember { mutableStateOf(false) }
     var keyDialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var stationMessage by remember { mutableStateOf<String?>(null) }
     var stations by remember { mutableStateOf<List<AirStation>>(emptyList()) }
     var stationText by remember(settings.station) { mutableStateOf(settings.station) }
     val latestSettings by rememberUpdatedState(settings)
@@ -51,13 +53,13 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         catch (e: CancellationException) { throw e }
         catch (_: Exception) { message = "연결 정보를 읽지 못했습니다. API 연결에서 키를 다시 저장해주세요." }
     }
-    fun refresh() {
+    fun refresh(target: WidgetSettings = settings) {
         scope.launch {
             busy = true; message = null
             try {
-                val refreshed = repository.refresh(settings, manual = true)
+                val refreshed = repository.refresh(target, manual = true)
                 // This coroutine belongs to the currently displayed location, not an earlier draft.
-                if (latestSettings.point == settings.point && latestSettings.station == settings.station && latestSettings.forecastArea == settings.forecastArea) {
+                if (latestSettings.point == target.point && latestSettings.station == target.station && latestSettings.forecastArea == target.forecastArea) {
                     data = refreshed
                     onUpdated()
                     message = "저장된 지역의 자료를 확인했습니다. 항목별 상태와 기준 시각을 확인해주세요."
@@ -68,11 +70,18 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
             finally { busy = false }
         }
     }
+    fun applyStation(name: String) {
+        val target = latestSettings.copy(station = name.trim())
+        onChange(target)
+        stations = emptyList()
+        stationMessage = "${target.station} 측정소를 적용하고 자료를 조회합니다."
+        refresh(target)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("실제 자료", style = MaterialTheme.typography.titleMedium)
         if (settings.showSample) Text("위 미리보기와 홈 위젯은 샘플 모드입니다. 아래는 실제 자료입니다.", fontSize = 11.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = ::refresh, enabled = !busy && settings.point != null) { Text(if (busy) "확인 중…" else "새로고침") }
+            Button(onClick = { refresh() }, enabled = !busy && settings.point != null) { Text(if (busy) "확인 중…" else "새로고침") }
             OutlinedButton(onClick = { keyDialog = true }, enabled = !busy) { Text("API 연결") }
         }
         val weather = data.weather
@@ -100,31 +109,33 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         }
         HorizontalDivider()
         Text("에어코리아 실측", style = MaterialTheme.typography.titleSmall)
+        Text("가까운 측정소 목록에서 선택하면 바로 조회합니다. 직접 입력할 때는 시·군 이름이 아닌 정확한 측정소 이름을 사용해주세요.", fontSize = 11.sp)
         OutlinedTextField(stationText, { stationText = it.take(60) }, label = { Text("고정 측정소 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { onChange(settings.copy(station = stationText.trim())) }, enabled = !busy) { Text("측정소 적용") }
+            TextButton(onClick = { applyStation(stationText) }, enabled = !busy && stationText.isNotBlank()) { Text("적용 후 조회") }
             TextButton(onClick = {
                 scope.launch {
-                    busy = true; message = null
+                    busy = true; stationMessage = null
                     try {
                         val found = repository.nearestStations(settings)
                         if (latestSettings.point == settings.point) {
                             stations = found
-                            if (stations.isEmpty()) message = "측정소를 찾지 못했습니다. 이름을 직접 입력할 수 있습니다."
+                            if (stations.isEmpty()) stationMessage = "측정소를 찾지 못했습니다. 이름을 직접 입력할 수 있습니다."
                         }
                     }
                     catch (e: CancellationException) { throw e }
-                    catch (e: ApiFailure) { message = e.problem.title }
-                    catch (_: Exception) { message = "측정소를 찾지 못했습니다. 에어코리아 측정소정보 서비스 승인 상태를 확인해주세요." }
+                    catch (e: ApiFailure) { stationMessage = SourceStatus("측정소", issue = e.problem, httpStatus = e.httpStatus, providerCode = e.providerCode).description() }
+                    catch (_: Exception) { stationMessage = "측정소를 찾지 못했습니다. 에어코리아 측정소정보 서비스 승인 상태를 확인해주세요." }
                     finally { busy = false }
                 }
             }, enabled = !busy && settings.point != null) { Text("가까운 측정소 찾기") }
         }
         stations.filter { settings.point != null }.forEach { station ->
-            TextButton(onClick = { onChange(settings.copy(station = station.name)); stations = emptyList() }) {
+            TextButton(onClick = { applyStation(station.name) }, enabled = !busy) {
                 Text("${station.name} · ${"%.1f".format(settings.point!!.distanceKm(station.point))}km\n${station.address}", fontSize = 12.sp)
             }
         }
+        stationMessage?.let { Text(it, fontSize = 11.sp) }
         val air = data.air
         Text("${settings.station.ifBlank { "측정소 미선택" }} · 관측 ${timeLabel(air?.at)}${if (air != null && isStale(air.at, now)) " · 오래된 자료" else ""}", fontSize = 11.sp)
         Text("미  ${air?.pm10?.let { "$it μg/m³ · ${DustGrade.fromConcentration(it, false).title}" } ?: "자료 없음"}${air?.pm10Flag?.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()}", fontSize = 13.sp)
@@ -135,12 +146,14 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
             val date = now.toLocalDate().plusDays(offset)
             val pm10 = data.airForecasts.firstOrNull { it.date == date && it.pollutant == "PM10" }
             val pm25 = data.airForecasts.firstOrNull { it.date == date && it.pollutant == "PM25" }
-            Text("${relativeDay(date, now.toLocalDate())} 예보 · 미 ${pm10?.grade(settings.forecastArea) ?: "미발표"} / 초미 ${pm25?.grade(settings.forecastArea) ?: "미발표"}", fontSize = 13.sp)
+            Text("${relativeDay(date, now.toLocalDate())} 예보 · 미 ${pm10?.grade(settings.forecastArea) ?: "자료 없음"} / 초미 ${pm25?.grade(settings.forecastArea) ?: "자료 없음"}", fontSize = 13.sp)
             Text("발표 · 미 ${timeLabel(pm10?.issuedAt)} / 초미 ${timeLabel(pm25?.issuedAt)}", fontSize = 10.sp)
         }
         data.statuses.forEach { status ->
-            Text("${status.name} · ${status.issue?.title ?: if (status.receivedAt == null) "아직 확인 전" else "수신 완료"}\n수신 ${timeLabel(status.receivedAt)}", fontSize = 10.sp)
+            Text("${status.name} · ${status.description()}\n조회 ${timeLabel(status.attemptedAt)} · 수신 ${timeLabel(status.receivedAt)}" +
+                if (status.issue != null) if (status.receivedAt == null) "\n저장된 자료 없음" else "\n마지막 수신 자료 유지" else "", fontSize = 10.sp)
         }
+        Text("수동 재조회는 같은 자료당 1분 간격입니다. 측정소 목록은 나오는데 실측·예보만 인증 오류라면 대기오염정보 서비스의 활용 승인과 기능 선택을 확인해주세요.", fontSize = 11.sp)
         if (message != null) Text(message!!, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
         TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.data.go.kr/data/15084084/openapi.do"))) }) { Text("기상청 자료 출처", fontSize = 11.sp) }
         TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.data.go.kr/data/15073861/openapi.do"))) }) { Text("에어코리아 자료 출처", fontSize = 11.sp) }

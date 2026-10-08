@@ -100,7 +100,7 @@ fun TwilightScreen(
                 Text("미 = 미세먼지   초미 = 초미세먼지", color = Muted, fontSize = 11.sp)
                 Text("홈 격자에 따라 실제 크기가 달라집니다. 좁은 칸에서는 글자를 줄여 필수 정보를 유지합니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
-            LiveDataPanel(settings, onChange) { revision++ }
+            LiveDataPanel(settings, onChange, onUpdated = { revision++ })
             SettingSection("01", "고정 지역") {
                 ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it, latitude = null, longitude = null, airArea = null, station = "")) }
                 ManualRegionSettings(settings, onChange)

@@ -2,15 +2,18 @@ package com.jinwoo.twilightandyou.data.remote
 
 import com.jinwoo.twilightandyou.model.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.net.SocketTimeoutException
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLException
 
 fun normalizeServiceKey(raw: String): String {
     val trimmed = raw.trim()
@@ -36,24 +39,23 @@ fun interface ApiTransport {
     suspend fun get(path: String, key: String, params: Map<String, String>): String
 }
 
-class HttpsApiTransport : ApiTransport {
+class HttpsApiTransport(private val connect: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }) : ApiTransport {
     override suspend fun get(path: String, key: String, params: Map<String, String>): String = withContext(Dispatchers.IO) {
         // Only these public providers receive the key; redirects are never followed.
         require(path in PublicWeatherApi.paths)
-        val query = (params + ("serviceKey" to normalizeServiceKey(key))).entries.joinToString("&") {
+        val normalizedKey = try { normalizeServiceKey(key) } catch (_: IllegalArgumentException) { throw ApiFailure(DataProblem.AUTH) }
+        val query = (params + ("serviceKey" to normalizedKey)).entries.joinToString("&") {
             "${URLEncoder.encode(it.key, "UTF-8")}=${URLEncoder.encode(it.value, "UTF-8")}"
         }
-        val connection = URL("https://apis.data.go.kr/$path?$query").openConnection() as HttpsURLConnection
+        val connection = connect(URL("https://apis.data.go.kr/$path?$query"))
         try {
             connection.connectTimeout = 12_000
             connection.readTimeout = 15_000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/json")
             val code = connection.responseCode
-            if (code == 401 || code == 403) throw ApiFailure(DataProblem.AUTH)
-            if (code == 429) throw ApiFailure(DataProblem.QUOTA)
-            if (code != 200) throw ApiFailure(DataProblem.NETWORK)
-            connection.inputStream.use { stream ->
+            val input = if (code in 200..299) connection.inputStream else connection.errorStream
+            val body = input?.use { stream ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
                 while (true) {
@@ -63,8 +65,20 @@ class HttpsApiTransport : ApiTransport {
                     output.write(buffer, 0, count)
                 }
                 output.toString("UTF-8")
-            }
-        } catch (e: ApiFailure) { throw e }
+            }.orEmpty()
+            ApiParsers.failure(body)?.let { throw ApiFailure(it.problem, code, it.providerCode) }
+            if (code !in 200..299) throw ApiFailure(when (code) {
+                401, 403 -> DataProblem.AUTH
+                429 -> DataProblem.QUOTA
+                408, 504 -> DataProblem.TIMEOUT
+                in 500..599 -> DataProblem.SERVER
+                else -> DataProblem.REQUEST
+            }, code)
+            body
+        } catch (e: CancellationException) { throw e }
+        catch (e: ApiFailure) { throw e }
+        catch (_: SocketTimeoutException) { throw ApiFailure(DataProblem.TIMEOUT) }
+        catch (_: SSLException) { throw ApiFailure(DataProblem.SECURE_CONNECTION) }
         catch (_: Exception) { throw ApiFailure(DataProblem.NETWORK) }
         finally { connection.disconnect() }
     }

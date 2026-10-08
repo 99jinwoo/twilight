@@ -45,7 +45,7 @@ class LiveRepositoryTest {
                 }
                 PublicWeatherApi.FCST -> ok("""[{"baseDate":"${params.getValue("base_date")}","baseTime":"${params.getValue("base_time")}","fcstDate":"20261008","fcstTime":"1800","category":"TMP","fcstValue":"21"}]""")
                 PublicWeatherApi.AIR -> {
-                    if (failAir) throw ApiFailure(DataProblem.NETWORK)
+                    if (failAir) throw ApiFailure(DataProblem.AUTH, 500, "20")
                     ok("""[{"dataTime":"2026-10-08 17:00","pm10Value":"42","pm25Value":"12"}]""")
                 }
                 PublicWeatherApi.AIR_FORECAST -> ok("""[{"informCode":"${params.getValue("informCode")}","informData":"2026-10-09","dataTime":"2026-10-08 17시 발표","informGrade":"서울 : 보통, 부산 : 좋음"}]""")
@@ -71,7 +71,18 @@ class LiveRepositoryTest {
             val second = repo.refresh(settings, manual = true)
             assertEquals(24.0, second.weather!!.temperature)
             assertEquals(42, second.air!!.pm10)
-            assertEquals(DataProblem.NETWORK, second.statuses.single { it.name == "에어코리아 실측" }.issue)
+            val failure = second.statuses.single { it.name == "에어코리아 실측" }
+            assertEquals(DataProblem.AUTH, failure.issue)
+            assertEquals(500, failure.httpStatus)
+            assertEquals("20", failure.providerCode)
+            assertEquals(now.toInstant(), failure.attemptedAt!!.toInstant())
+            assertEquals(failure, repo.cached(settings).statuses.single { it.name == "에어코리아 실측" })
+            now = now.plusMinutes(2)
+            failAir = false
+            val recovered = repo.refresh(settings, manual = true).statuses.single { it.name == "에어코리아 실측" }
+            assertNull(recovered.issue)
+            assertNull(recovered.httpStatus)
+            assertNull(recovered.providerCode)
             File(context.noBackupFilesDir, "live-data").listFiles()!!.forEach { assertFalse(it.readText().contains("synthetic-private")) }
         } finally { ApiKeyStore(context).clear(); repo.clearCache() }
     }

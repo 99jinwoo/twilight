@@ -11,8 +11,8 @@ android {
         applicationId = "com.jinwoo.twilightandyou"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0-preview"
+        versionCode = 4
+        versionName = "0.3.1-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }

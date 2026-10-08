@@ -10,20 +10,20 @@ import java.time.LocalTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
-class ApiFailure(val problem: DataProblem) : Exception(problem.title)
+class ApiFailure(val problem: DataProblem, httpStatus: Int? = null, providerCode: String? = null) : Exception(problem.title) {
+    val httpStatus = httpStatus?.takeIf { it in 100..599 }
+    // Retain numeric diagnostics only; never keep arbitrary gateway messages or credentials.
+    val providerCode = providerCode?.trim()?.takeIf { it.matches(Regex("[0-9]{1,4}")) }
+}
 data class ApiPage(val items: List<JSONObject>, val total: Int)
 
 object ApiParsers {
     fun page(body: String): ApiPage {
-        // Gateways may return XML even for JSON requests. Never surface the raw body or key.
-        if (body.trimStart().startsWith("<")) {
-            val code = Regex("<(?:returnReasonCode|resultCode)>([^<]+)</").find(body)?.groupValues?.get(1)
-            throw ApiFailure(problem(code))
-        }
+        failure(body)?.let { throw it }
         try {
             val root = JSONObject(body).getJSONObject("response")
             val code = root.getJSONObject("header").getString("resultCode")
-            if (code !in setOf("00", "0", "0000")) throw ApiFailure(problem(code))
+            if (code !in setOf("00", "0", "0000")) throw ApiFailure(problem(code), providerCode = code)
             val data = root.getJSONObject("body")
             val container = data.opt("items")
             val items = if (container is JSONObject && container.has("item")) container.opt("item") else container
@@ -38,10 +38,26 @@ object ApiParsers {
         catch (_: Exception) { throw ApiFailure(DataProblem.FORMAT) }
     }
 
+    /** Both providers can send a gateway error as JSON or XML, including on non-2xx responses. */
+    fun failure(body: String): ApiFailure? {
+        val code = if (body.trimStart().startsWith("<")) {
+            Regex("<(?:returnReasonCode|resultCode)>([^<]+)</").find(body)?.groupValues?.get(1)
+        } else runCatching {
+            val root = JSONObject(body)
+            root.optJSONObject("OpenAPI_ServiceResponse")?.optJSONObject("cmmMsgHeader")?.text("returnReasonCode")
+                ?: root.optJSONObject("response")?.optJSONObject("header")?.text("resultCode")
+        }.getOrNull()
+        return code?.trim()?.takeIf { it.isNotEmpty() && it !in setOf("0", "00", "0000") }
+            ?.let { ApiFailure(problem(it), providerCode = it) }
+    }
+
     private fun problem(code: String?) = when (code?.trim()?.trimStart('0')) {
         "20", "30", "31", "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" -> DataProblem.AUTH
         "22", "23" -> DataProblem.QUOTA
         "3" -> DataProblem.NO_DATA
+        "1", "2", "4", "99" -> DataProblem.SERVER
+        "5" -> DataProblem.TIMEOUT
+        "10", "11", "12", "29" -> DataProblem.REQUEST
         else -> DataProblem.FORMAT
     }
 
