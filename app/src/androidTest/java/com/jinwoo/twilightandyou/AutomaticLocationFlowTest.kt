@@ -35,7 +35,8 @@ class AutomaticLocationFlowTest {
             compose.activityRule.scenario.onActivity { activity ->
                 activity.setContent {
                     var settings by remember { mutableStateOf(WidgetSettings(autoLocation = true)) }
-                    SideEffect { displayed.set(settings) }
+                    val current = settings
+                    SideEffect { displayed.set(current) }
                     TwilightTheme {
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             androidx.compose.material3.Button(onClick = { settings = settings.copy(autoLocation = false) }) { androidx.compose.material3.Text("시험 고정 지역") }
