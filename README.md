@@ -23,8 +23,16 @@ JDK 17, Android SDK Platform 36, Build Tools 35.0.0. Android Studio에서 저장
 
 GitHub Actions는 PR마다 빌드 및 API 29/35 검사를 실행하도록 구성되어 있다. 실제 실행 결과와 남은 검증은 [STATUS](docs/STATUS.md)에서 확인한다.
 
+## 새 창에서 작업 재개
+
+먼저 [공통 작업 규칙](AGENTS.md)과 [재시작 안내](docs/RESUME.md)를 읽는다. Claude Code용 [CLAUDE.md](CLAUDE.md)도 같은 문서로 연결된다. 이전 대화 없이 기준 버전·서명 상태·검증·남은 과업을 확인할 수 있다.
+
+현재 배포 기준은 v0.3.2-preview(versionCode 5), PR #2까지 main에 병합됐다. 새 작업은 원격 main·열린 PR·릴리스를 먼저 확인하고 새 브랜치에서 진행한다. 고정 배포 서명과 실기기 후속 검증은 아직 남아 있다.
+
 ## 문서
 
+- [공통 작업 규칙](AGENTS.md) · [Claude Code 진입점](CLAUDE.md)
+- [새 세션 재시작·마지막 인수인계](docs/RESUME.md)
 - [API 연결 안내](docs/API_SETUP.md)
 - [박명 검증 결과](docs/ASTRONOMY_VALIDATION.md)
 - [현재 사양](docs/SPEC.md)

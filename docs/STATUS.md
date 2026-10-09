@@ -1,6 +1,13 @@
 # 구현·검증 상태
 
-업데이트: 2026-10-09. **v0.3.2-preview 측정소 자동 연결·가로 위젯 수정 검사 완료**. PR #1은 병합되었고 [PR #2](https://github.com/99jinwoo/twilight/pull/2)에서 검토한다.
+업데이트: 2026-10-09. **v0.3.2-preview 수정·검증·배포 및 PR #2 병합 완료**. [PR #1](https://github.com/99jinwoo/twilight/pull/1)·[PR #2](https://github.com/99jinwoo/twilight/pull/2) 모두 main에 반영됐다. 새 세션은 [RESUME](RESUME.md)에서 시작한다. 제품 전체 요구와 실기기 후속 검증까지 완료됐다는 뜻은 아니다.
+
+## 대화 보관 전 기록
+
+- PR #2 merge는 `f5b186b7c66f488091cbbeaa1da3fa4df4b67eb0`. [병합 후 CI 37924663898](https://github.com/99jinwoo/twilight/actions/runs/37924663898)도 성공했다. 배포 APK는 아래의 기존 CI 37864244374 산출물을 유지한다.
+- 인수인계 문서 작업 시작 시 원격 main만 남고 열린 PR은 없으며, 병합 후 브랜치 자동 삭제 설정이 켜져 있음을 확인했다. 이번 문서 PR의 병합 상태는 재개할 때 별도로 확인한다.
+- `AGENTS.md`를 공통 규칙으로 유지하고 `CLAUDE.md`·README에서 재시작 안내로 연결한다. 최신 버전·서명 제한·재현/검사 방법·소스 위치·후속 과업을 기록했다.
+- 이번 변경은 문서뿐이다. 앱·빌드·검사 설정은 v0.3.2와 같음을 확인하며 새 APK 배포나 Android 검사 재실행은 하지 않는다.
 
 ## v0.3.2 수정
 
