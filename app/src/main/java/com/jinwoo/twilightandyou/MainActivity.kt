@@ -33,6 +33,9 @@ class MainActivity : ComponentActivity() {
             var busy by remember { mutableStateOf(false) }
             var message by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(id) { settings = SettingsStore(this@MainActivity).read(id) }
+            LaunchedEffect(settings) {
+                if (id == 0) settings?.let { SettingsStore(this@MainActivity).save(0, it) }
+            }
             TwilightTheme {
                 settings?.let { current ->
                     TwilightScreen(
@@ -69,7 +72,7 @@ class MainActivity : ComponentActivity() {
                                 finally { busy = false }
                             }
                         }} else null,
-                        editingWidget = id != 0, busy = busy, message = message
+                        editingWidget = id != 0, busy = busy, message = message, widgetId = id
                     )
                 }
             }
@@ -112,7 +115,7 @@ class WidgetConfigurationActivity : ComponentActivity() {
                                 catch (_: Exception) { message = "저장하지 못했습니다. 다시 시도해주세요." }
                             finally { busy = false }
                         }
-                    }, true, busy, message)
+                    }, true, busy, message, widgetId = id)
                 }
             }
         }

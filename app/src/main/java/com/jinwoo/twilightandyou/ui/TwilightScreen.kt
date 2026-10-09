@@ -53,10 +53,23 @@ fun TwilightScreen(
     onSave: (() -> Unit)?,
     editingWidget: Boolean,
     busy: Boolean,
-    message: String?
+    message: String?,
+    widgetId: Int = 0
 ) {
-    var shape by remember { mutableStateOf(WidgetShape.COMPACT) }
-    val preview = settings.copy(showSample = true)
+    val context = LocalContext.current
+    val orientation = androidx.compose.ui.platform.LocalConfiguration.current.orientation
+    val installedSize = remember(widgetId, orientation) {
+        if (widgetId <= 0) null else {
+            val options = android.appwidget.AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId)
+            val portrait = orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val width = options.getInt(if (portrait) android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH else android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH)
+            val height = options.getInt(if (portrait) android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT else android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
+            if (width > 0 && height > 0) DpSize(width.dp, height.dp) else null
+        }
+    }
+    var shape by remember(widgetId, installedSize) { mutableStateOf(installedSize?.let { WidgetShape.forSize(it.width.value, it.height.value) } ?: WidgetShape.COMPACT) }
+    val preview = settings
+    var revision by remember { mutableIntStateOf(0) }
     Scaffold(
         containerColor = Ink,
         bottomBar = {
@@ -75,7 +88,7 @@ fun TwilightScreen(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("TWILIGHT / AND YOU", fontSize = 11.sp, letterSpacing = 2.sp, color = Peach, fontWeight = FontWeight.Bold)
-                Text("PREVIEW 02", fontSize = 9.sp, letterSpacing = 1.sp, color = Muted)
+                Text("PREVIEW 03", fontSize = 9.sp, letterSpacing = 1.sp, color = Muted)
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(if (editingWidget) "나의 위젯을\n다듬는 시간." else "날씨와 빛,\n나의 작은 창.", fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.SemiBold)
@@ -92,16 +105,17 @@ fun TwilightScreen(
                         drawCircle(Color(0x66FFD8B0), radius = size.width * 0.15f, center = Offset(size.width * 0.76f, size.height * 0.31f))
                         drawCircle(Color(0x443D354E), radius = size.width * 0.9f, center = Offset(size.width * 0.8f, size.height * 1.9f))
                     }
-                    ComposeWidgetPreview(preview, shape)
-                    Text("샘플 화면 · 실제 날씨가 아닙니다", color = Color(0xFFFDF0E8), fontSize = 10.sp,
+                    ComposeWidgetPreview(preview, shape, revision, installedSize)
+                    Text(if (settings.showSample) "샘플 화면 · 실제 날씨가 아닙니다" else "박명은 기기 계산 · 날씨는 저장된 실제 자료", color = Color(0xFFFDF0E8), fontSize = 10.sp,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp))
                 }
                 Text("미 = 미세먼지   초미 = 초미세먼지", color = Muted, fontSize = 11.sp)
                 Text("홈 격자에 따라 실제 크기가 달라집니다. 좁은 칸에서는 글자를 줄여 필수 정보를 유지합니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
-            SettingSection("01", "고정 지역") {
-                ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it)) }
-                Text("이번 버전은 지역 이름과 배치를 확인하는 단계입니다. 위치 확인과 실제 자료 연결은 다음 단계에 추가합니다.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+            LiveDataPanel(settings, onChange, onUpdated = { revision++ })
+            SettingSection("01", "지역과 위치") {
+                ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it, latitude = null, longitude = null, airArea = null, station = "", autoLocation = false, autoStation = true)) }
+                ManualRegionSettings(settings, onChange)
             }
             SettingSection("02", "지정 박명") {
                 ChoiceRow(TwilightKind.entries, settings.twilight, { it.title }) { onChange(settings.copy(twilight = it)) }
@@ -119,11 +133,11 @@ fun TwilightScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("홈 위젯에도 샘플 표시", fontSize = 14.sp)
-                        Text("배치 확인용 가상 값입니다. 끄면 빈 값으로 표시합니다.", color = Muted, fontSize = 11.sp)
+                        Text("켜면 가상 값, 끄면 기기 계산·실제 자료를 표시합니다.", color = Muted, fontSize = 11.sp)
                     }
                     Switch(checked = settings.showSample, onCheckedChange = { onChange(settings.copy(showSample = it)) })
                 }
-                Text("관측 · 예보 연결 전\n기온·먼지·시간별 예보·박명 시각은 모두 샘플입니다. 박명 순서와 날짜만 현재 한국 시간에 맞춰 선택합니다.", color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
+                Text("박명은 선택 지역의 좌표로 기기에서 계산합니다. 실제 날씨·먼지는 API 연결과 새로고침 후 표시됩니다. 샘플을 켜면 실제 자료와 섞지 않고 가상 값만 표시합니다.", color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
                 if (onPin != null) Button(onClick = { onPin(shape) }, modifier = Modifier.fillMaxWidth().height(50.dp), enabled = !busy) {
                     Text("${shape.title} 홈화면에 추가", fontWeight = FontWeight.Bold)
                 }
@@ -159,18 +173,21 @@ private fun SettingSection(number: String, title: String, content: @Composable C
 }
 
 @Composable
-private fun ComposeWidgetPreview(settings: WidgetSettings, shape: WidgetShape) {
+private fun ComposeWidgetPreview(settings: WidgetSettings, shape: WidgetShape, revision: Int, installedSize: DpSize?) {
     val context = LocalContext.current
+    val matches = installedSize != null && WidgetShape.forSize(installedSize.width.value, installedSize.height.value) == shape
+    val previewWidth = if (matches) installedSize!!.width.value.toInt() else shape.width
+    val previewHeight = if (matches) installedSize!!.height.value.toInt() else shape.height
     var remoteViews by remember { mutableStateOf<RemoteViews?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(settings, shape) {
+    LaunchedEffect(settings, shape, revision, previewWidth, previewHeight) {
         failed = false
         try {
-            remoteViews = TwilightWidget(settings).compose(context, size = DpSize(shape.width.dp, shape.height.dp))
+            remoteViews = TwilightWidget(settings).compose(context, size = DpSize(previewWidth.dp, previewHeight.dp))
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { failed = true }
     }
-    Box(Modifier.size(shape.width.dp, shape.height.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(previewWidth.dp, previewHeight.dp), contentAlignment = Alignment.Center) {
         if (failed) Text("미리보기를 불러오지 못했습니다", fontSize = 10.sp)
         else remoteViews?.let { snapshot ->
             AndroidView(

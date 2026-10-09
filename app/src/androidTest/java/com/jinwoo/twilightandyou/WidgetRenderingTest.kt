@@ -36,7 +36,7 @@ class WidgetRenderingTest {
     @Test fun actualRemoteViewsKeepBothTwilightsAndForecastsWithoutClipping() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val sizes = listOf(56 to 72, 100 to 112, 140 to 72, 224 to 112, 224 to 72, 112 to 228, 56 to 160)
+        val sizes = listOf(56 to 72, 100 to 112, 130 to 72, 140 to 72, 170 to 96, 224 to 112, 224 to 72, 112 to 228, 56 to 160)
         val failures = mutableListOf<String>()
         for ((width, height) in sizes) {
             val remoteViews = withTimeout(30_000) {
@@ -77,7 +77,7 @@ class WidgetRenderingTest {
                     if (shape != WidgetShape.COMPACT) {
                         assertTrue(combined, combined.contains("시간별 예보"))
                         assertTrue(combined, combined.contains("18시") && combined.contains("21°"))
-                        if (width != 140) assertTrue(combined, combined.contains("21시") && combined.contains("18°"))
+                        assertTrue(combined, combined.contains("21시") && combined.contains("18°"))
                     }
                     for (text in texts.filter { it.text.isNotEmpty() }) {
                         val bounds = Rect().also { text.getDrawingRect(it) }
@@ -104,15 +104,62 @@ class WidgetRenderingTest {
             .forEach { it.updateDrawState(paint) }
     }
 
+    @Test fun liveForecastBadgeAndCalculatedTwilightFitSmallWidgets() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val now = ZonedDateTime.parse("2026-10-08T23:00:00+09:00")
+        val snapshot = LiveSnapshot(weather = WeatherObservation(now, 22.0, 0),
+            air = AirObservation(now, 42, 12, "", "", "2", "1"),
+            forecast = (0L..4L).map { WeatherForecast(now.plusHours(it), -9.0 - it, 1, 0) }, forecastIssuedAt = now.minusHours(3))
+        for ((width, height) in listOf(56 to 72, 100 to 112, 130 to 72, 140 to 72, 170 to 96, 224 to 112, 112 to 228)) {
+            val remoteViews = withTimeout(30_000) {
+                TwilightWidget(WidgetSettings(), now, snapshot).compose(context, size = DpSize(width.dp, height.dp))
+            }
+            instrumentation.runOnMainSync {
+                val parent = FrameLayout(context)
+                val view = remoteViews.apply(context, parent)
+                val density = context.resources.displayMetrics.density
+                val w = (width * density).toInt(); val h = (height * density).toInt()
+                view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+                view.layout(0, 0, w, h)
+                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                view.draw(Canvas(bitmap))
+                val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+                File(directory, "live-widget-${width}x${height}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
+                val texts = descendants(view).filterIsInstance<TextView>()
+                assertTrue(texts.any { it.text.toString() == "예" })
+                assertTrue(texts.any { it.text.contains("오늘 EENT") })
+                if (WidgetShape.forSize(width.toFloat(), height.toFloat()) == WidgetShape.WIDE) {
+                    assertTrue("All four future hours must remain visible", texts.any { it.text.contains("03시") })
+                    assertTrue(texts.any { it.text.contains("내일") })
+                    val hours = listOf("00시", "01시", "02시", "03시").map { hour -> texts.single { it.text.toString() == hour } }
+                    val positions = hours.map { text -> Rect().also { text.getDrawingRect(it); (view as ViewGroup).offsetDescendantRectToMyCoords(text, it) } }
+                    assertEquals("All forecast times must share one horizontal row", 1, positions.map { it.top }.distinct().size)
+                    assertTrue("Forecast hours must run left to right", positions.zipWithNext().all { (a,b) -> a.right <= b.left })
+                }
+                for (text in texts.filter { it.text.isNotEmpty() }) {
+                    val bounds = Rect().also { text.getDrawingRect(it) }
+                    (view as ViewGroup).offsetDescendantRectToMyCoords(text, bounds)
+                    assertTrue("Live text outside widget: ${text.text}", Rect(0, 0, w, h).contains(bounds))
+                    val layout = text.layout
+                    assertNotNull(layout)
+                    for (line in 0 until layout.lineCount) assertEquals("Live ellipsis ${width}x${height}: ${text.text}", 0, layout.getEllipsisCount(line))
+                    assertTrue("Live clipping ${width}x${height}: ${text.text}", layout.height <= text.height - text.compoundPaddingTop - text.compoundPaddingBottom)
+                }
+            }
+        }
+    }
+
     @Test fun mainScreenLaunchesAndSavesScreenshot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         ActivityScenario.launch(MainActivity::class.java).use {
             instrumentation.waitForIdleSync()
             val deadline = SystemClock.uptimeMillis() + 15_000
-            while (!containsText(instrumentation.uiAutomation.rootInActiveWindow, "22°") && SystemClock.uptimeMillis() < deadline) {
+            while (!containsText(instrumentation.uiAutomation.rootInActiveWindow, "BMNT") && SystemClock.uptimeMillis() < deadline) {
                 SystemClock.sleep(100)
             }
-            assertTrue("Real widget preview did not load", containsText(instrumentation.uiAutomation.rootInActiveWindow, "22°"))
+            assertTrue("Real widget preview did not load", containsText(instrumentation.uiAutomation.rootInActiveWindow, "BMNT"))
             val context = instrumentation.targetContext
             val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
             instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->

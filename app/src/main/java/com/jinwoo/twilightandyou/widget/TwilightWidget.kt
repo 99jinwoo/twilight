@@ -18,11 +18,14 @@ import androidx.glance.unit.ColorProvider
 import com.jinwoo.twilightandyou.MainActivity
 import com.jinwoo.twilightandyou.R
 import com.jinwoo.twilightandyou.data.SettingsStore
+import com.jinwoo.twilightandyou.data.LiveRepository
+import kotlinx.coroutines.CancellationException
 import com.jinwoo.twilightandyou.model.*
 
 class TwilightWidget(
     private val previewSettings: WidgetSettings? = null,
-    private val previewTime: java.time.ZonedDateTime? = null
+    private val previewTime: java.time.ZonedDateTime? = null,
+    private val previewData: LiveSnapshot? = null
 ) : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
@@ -34,7 +37,12 @@ class TwilightWidget(
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val widgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         val settings = previewSettings ?: SettingsStore(context).read(widgetId)
-        val model = WidgetPresentation.from(settings, previewTime ?: java.time.ZonedDateTime.now(SEOUL))
+        val now = previewTime ?: java.time.ZonedDateTime.now(SEOUL)
+        val base = WidgetPresentation.from(settings, now)
+        val model = if (settings.showSample) base else try {
+            base.withLiveData(previewData ?: LiveRepository(context).cached(settings, now), settings, now)
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { base }
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             .setData(android.net.Uri.parse("twilight://widget/$widgetId"))
@@ -96,11 +104,12 @@ private fun Dust(label: String, value: Int?, grade: DustGrade, settings: WidgetS
 @Composable
 private fun CurrentContent(model: WidgetPresentation, settings: WidgetSettings, showRegion: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
-        if (showRegion) Label(settings.region, settings, 9, muted = true)
+        if (showRegion) Label(settings.region.take(8), settings, 9, muted = true)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Label(model.temperature, settings, 23, bold = true)
             Spacer(GlanceModifier.width(2.dp))
             Label(model.weather, settings, 19)
+            if (model.weatherIsForecast) Label("예", settings, 6, muted = true)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dust("미", model.pm10, model.pm10Grade, settings)
@@ -118,23 +127,25 @@ private fun CurrentContent(model: WidgetPresentation, settings: WidgetSettings, 
 private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, width: Float, height: Float) {
     val short = height < 96f
     val narrow = width < 210f
-    val leftWidth = if (narrow) 59f else 84f
-    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.70f else 1f))
-    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.8f else 1f))
+    val leftWidth = if (width < 150f) 56f else if (narrow) 59f else 84f
+    val gap = if (narrow) 3f else 5f
+    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (width < 150f) 0.67f else if (narrow || short) 0.70f else 1f))
+    val forecastFit = ((width - leftWidth - 2 * gap - 1f - if (short) 4f else 12f) / 96f).coerceIn(0.55f, 1f)
+    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, forecastFit, if (short) 0.8f else 1f))
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Box(GlanceModifier.width(leftWidth.dp), contentAlignment = Alignment.Center) {
             CurrentContent(model, currentSettings, !short)
         }
-        Spacer(GlanceModifier.width(5.dp))
+        Spacer(GlanceModifier.width(gap.dp))
         Box(GlanceModifier.width(1.dp).height(52.dp).background(ColorProvider(Color(settings.palette.muted).copy(alpha = 0.25f)))) {}
-        Spacer(GlanceModifier.width(5.dp))
+        Spacer(GlanceModifier.width(gap.dp))
         Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
             Label("시간별 예보", forecastSettings, 8, muted = true)
-            Spacer(GlanceModifier.height(4.dp))
+            Spacer(GlanceModifier.height(if (narrow) 1.dp else 4.dp))
             if (model.hourly.isEmpty()) {
                 Label("미연결", forecastSettings, 10, muted = true)
             } else Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                model.hourly.take(if (width >= 210f) 4 else if (width >= 170f) 3 else 2).forEach { hour ->
+                model.hourly.take(4).forEach { hour ->
                     Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Label(relativeDay(hour.at.toLocalDate(), model.today), forecastSettings, 7, muted = true)
                         Label(hour.hour, forecastSettings, 9, muted = true)
