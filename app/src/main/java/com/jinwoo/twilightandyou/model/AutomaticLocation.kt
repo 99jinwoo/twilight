@@ -11,8 +11,7 @@ data class LocationUpdate(val settings: WidgetSettings, val message: String, val
 suspend fun resolveAutomaticLocation(
     previous: WidgetSettings,
     locate: suspend () -> Coordinates?,
-    describe: suspend (Coordinates) -> LocationDescription?,
-    stations: suspend (WidgetSettings) -> List<AirStation>
+    describe: suspend (Coordinates) -> LocationDescription?
 ): LocationUpdate {
     if (!previous.autoLocation) return LocationUpdate(previous, "고정 지역을 사용합니다.")
     val point = try { locate() }
@@ -26,14 +25,12 @@ suspend fun resolveAutomaticLocation(
     catch (_: TimeoutCancellationException) { null }
     catch (e: CancellationException) { throw e }
     catch (_: Exception) { null }
+    val nearby = previous.point?.distanceKm(point)?.let { it <= 1.0 } == true
     val target = previous.copy(region = description?.name ?: "현재 위치", latitude = point.latitude,
-        longitude = point.longitude, airArea = description?.airArea.orEmpty(), station = "")
-    val nearest = try { stations(target).minByOrNull { point.distanceKm(it.point) } }
-    catch (e: CancellationException) { throw e }
-    catch (_: Exception) { null }
-    return LocationUpdate(target.copy(station = nearest?.name.orEmpty()),
-        "현재 위치를 적용했습니다." + (if (nearest == null) " 측정소를 찾지 못해 먼지 실측은 비워둡니다." else " 가까운 ${nearest.name} 측정소를 사용합니다.") +
-            if (target.forecastArea.isBlank()) " 먼지 예보권역은 지역 설정에서 확인해주세요." else "", true)
+        longitude = point.longitude, airArea = description?.airArea.orEmpty(),
+        station = if (nearby) previous.station else "", autoStation = if (nearby) previous.autoStation else true)
+    return LocationUpdate(target, "현재 위치를 적용했습니다." +
+        if (target.forecastArea.isBlank()) " 먼지 예보권역은 지역 설정에서 확인해주세요." else "", true)
 }
 
 /** AirKorea FAQ, 2026-01-27. Unknown administrative names remain unassigned. */

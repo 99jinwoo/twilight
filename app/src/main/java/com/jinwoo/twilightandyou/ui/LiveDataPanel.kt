@@ -9,6 +9,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import com.jinwoo.twilightandyou.widget.widgetIds
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,7 +53,9 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
     var keyDialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var stationMessage by remember { mutableStateOf<String?>(null) }
+    var stationProblem by remember { mutableStateOf<DataProblem?>(null) }
     var stations by remember { mutableStateOf<List<AirStation>>(emptyList()) }
+    var stationOptions by remember { mutableStateOf(false) }
     var stationText by remember(settings.station) { mutableStateOf(settings.station) }
     val latestSettings by rememberUpdatedState(settings)
     val now = ZonedDateTime.now(SEOUL)
@@ -66,40 +70,48 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
     var refreshJob by remember { mutableStateOf<Job?>(null) }
     val latestOnChange by rememberUpdatedState(onChange)
     suspend fun refreshData(requested: WidgetSettings, locate: Boolean) {
-            if (busy) return
-            var target = requested
-            busy = true; message = null
-            try {
-                var locationMessage: String? = null
-                if (locate && requested.autoLocation) {
-                    val update = automaticLocator?.invoke(requested) ?: resolveAutomaticLocation(requested, locate = {
-                        val allowed = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
-                            .any { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
-                        if (allowed) currentCoordinates(context) else null
-                    }, describe = { describeCoordinates(context, it) }, stations = { repository.nearestStations(it) })
-                    // Discard a result if the user changed location/mode while the request was running.
-                    if (latestSettings.point != requested.point || latestSettings.autoLocation != requested.autoLocation ||
-                        latestSettings.station != requested.station || latestSettings.forecastArea != requested.forecastArea) return
-                    locationMessage = update.message
-                    if (update.located) {
-                        target = latestSettings.copy(region = update.settings.region, latitude = update.settings.latitude,
-                            longitude = update.settings.longitude, airArea = update.settings.airArea, station = update.settings.station)
-                        latestOnChange(target)
-                        SettingsStore(context).updateAutomaticLocations(widgetIds(context).toList() + 0, target)
-                        data = LiveSnapshot()
-                    }
-                }
-                val refreshed = repository.refresh(target, manual = true)
-                // This coroutine belongs to the currently displayed location, not an earlier draft.
-                if (latestSettings.point == target.point && latestSettings.station == target.station && latestSettings.forecastArea == target.forecastArea) {
-                    data = refreshed
-                    onUpdated()
-                    message = locationMessage ?: "저장된 지역의 자료를 확인했습니다. 항목별 상태와 기준 시각을 확인해주세요."
-                }
-                TwilightWidget().updateAll(context)
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { message = "자료를 확인하지 못했습니다. 연결 설정을 확인해주세요." }
-            finally { busy = false }
+        if (busy) return
+        val starting = latestSettings
+        var target = requested
+        busy = true; message = null
+        try {
+            var locationMessage: String? = null
+            var located = false
+            if (locate && requested.autoLocation) {
+                val update = automaticLocator?.invoke(requested) ?: resolveAutomaticLocation(requested, locate = {
+                    val allowed = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
+                        .any { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+                    if (allowed) currentCoordinates(context) else null
+                }, describe = { describeCoordinates(context, it) })
+                target = update.settings
+                located = update.located
+                locationMessage = update.message
+            }
+            val selection = repository.automaticStation(target)
+            target = selection.settings
+            if (latestSettings.point != starting.point || latestSettings.autoLocation != starting.autoLocation ||
+                latestSettings.station != starting.station || latestSettings.autoStation != starting.autoStation ||
+                latestSettings.forecastArea != starting.forecastArea) return
+            target = latestSettings.copy(region = target.region, latitude = target.latitude, longitude = target.longitude,
+                airArea = target.airArea, station = target.station, autoLocation = target.autoLocation, autoStation = target.autoStation)
+            latestOnChange(target)
+            if (located) SettingsStore(context).updateAutomaticLocations(widgetIds(context) + 0, target)
+            if (target.autoStation) SettingsStore(context).updateAutomaticStations(widgetIds(context) + 0, target)
+            stationProblem = selection.issue
+            stationMessage = if (selection.issue == null) null else
+                SourceStatus("측정소 자동 연결", issue = selection.issue).description() +
+                    if (selection.issue in setOf(DataProblem.AUTH, DataProblem.QUOTA, DataProblem.MISSING_KEY)) " · API 연결을 확인해주세요."
+                    else if (target.station.isBlank()) " · 다음 갱신 때 자동으로 다시 연결합니다." else " · 마지막 측정소를 유지합니다."
+            val refreshed = repository.refresh(target, manual = true)
+            if (latestSettings.point == target.point && latestSettings.station == target.station && latestSettings.forecastArea == target.forecastArea) {
+                data = refreshed
+                onUpdated()
+                message = locationMessage ?: "자료를 확인했습니다. 항목별 기준 시각을 확인해주세요."
+            }
+            TwilightWidget().updateAll(context)
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { message = "자료를 확인하지 못했습니다. 연결 설정을 확인해주세요." }
+        finally { busy = false }
     }
     fun refresh(target: WidgetSettings = settings, locate: Boolean = true) {
         if (!busy) refreshJob = scope.launch { refreshData(target, locate) }
@@ -111,14 +123,30 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer); refreshJob?.cancel() }
     }
-    LaunchedEffect(lifecycle, settings.autoLocation) {
-        if (settings.autoLocation) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+    LaunchedEffect(lifecycle, settings.autoLocation, settings.autoStation) {
+        if (settings.autoLocation || settings.autoStation) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             refreshData(latestSettings, locate = true)
+            // Retry station discovery while visible without requesting GPS again.
+            var retries = 0
+            while (retries++ < 2 && latestSettings.autoStation && latestSettings.station.isBlank() &&
+                stationProblem !in setOf(DataProblem.AUTH, DataProblem.QUOTA, DataProblem.MISSING_KEY) && ApiKeyStore(context).read().air.isNotBlank()) {
+                delay(65_000)
+                refreshData(latestSettings, locate = false)
+            }
             awaitCancellation()
         }
     }
+    var previousPoint by remember { mutableStateOf(settings.point) }
+    LaunchedEffect(settings.point) {
+        if (previousPoint != settings.point) {
+            previousPoint = settings.point
+            snapshotFlow { busy }.first { !it }
+            if (latestSettings.point == settings.point && latestSettings.autoStation && latestSettings.station.isBlank())
+                refreshData(latestSettings, locate = false)
+        }
+    }
     fun applyStation(name: String) {
-        val target = latestSettings.copy(station = name.trim())
+        val target = latestSettings.copy(station = name.trim(), autoStation = false)
         onChange(target)
         stations = emptyList()
         stationMessage = "${target.station} 측정소를 적용하고 자료를 조회합니다."
@@ -156,31 +184,35 @@ fun LiveDataPanel(settings: WidgetSettings, onChange: (WidgetSettings) -> Unit, 
         }
         HorizontalDivider()
         Text("에어코리아 실측", style = MaterialTheme.typography.titleSmall)
-        Text("가까운 측정소 목록에서 선택하면 바로 조회합니다. 직접 입력할 때는 시·군 이름이 아닌 정확한 측정소 이름을 사용해주세요.", fontSize = 11.sp)
-        if (settings.autoLocation) Text("현재 위치 모드에서는 다음 위치 갱신 때 가까운 측정소를 다시 선택합니다.", fontSize = 11.sp)
-        OutlinedTextField(stationText, { stationText = it.take(60) }, label = { Text("선택한 측정소 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { applyStation(stationText) }, enabled = !busy && stationText.isNotBlank()) { Text("적용 후 조회") }
-            TextButton(onClick = {
-                scope.launch {
-                    busy = true; stationMessage = null
-                    try {
-                        val found = repository.nearestStations(settings)
-                        if (latestSettings.point == settings.point) {
-                            stations = found
-                            if (stations.isEmpty()) stationMessage = "측정소를 찾지 못했습니다. 이름을 직접 입력할 수 있습니다."
-                        }
+        Text(if (settings.autoStation) "가까운 측정소를 자동으로 선택합니다. 직접 찾거나 입력할 필요가 없습니다." else "직접 선택한 측정소를 사용합니다.", fontSize = 11.sp)
+        Text(if (settings.autoStation) "자동 선택 · ${settings.station.ifBlank { if (busy) "연결 중…" else "연결 대기" }}" else "직접 선택 · ${settings.station}", fontSize = 13.sp)
+        TextButton(onClick = { stationOptions = !stationOptions }, enabled = !busy) { Text(if (stationOptions) "측정소 설정 닫기" else "측정소 변경 (선택 사항)") }
+        if (stationOptions) {
+            if (!settings.autoStation) TextButton(onClick = {
+                val target = latestSettings.copy(autoStation = true)
+                onChange(target)
+                refresh(target, locate = false)
+            }, enabled = !busy) { Text("가까운 측정소 자동 선택") }
+            OutlinedTextField(stationText, { stationText = it.take(60) }, label = { Text("직접 선택할 측정소 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { applyStation(stationText) }, enabled = !busy && stationText.isNotBlank()) { Text("적용 후 조회") }
+                TextButton(onClick = {
+                    scope.launch {
+                        busy = true; stationMessage = null
+                        try {
+                            val found = repository.nearestStations(settings)
+                            if (latestSettings.point == settings.point) stations = found
+                        } catch (e: CancellationException) { throw e }
+                        catch (e: ApiFailure) { stationMessage = SourceStatus("측정소", issue = e.problem, httpStatus = e.httpStatus, providerCode = e.providerCode).description() }
+                        catch (_: Exception) { stationMessage = "측정소 연결을 다시 시도해주세요." }
+                        finally { busy = false }
                     }
-                    catch (e: CancellationException) { throw e }
-                    catch (e: ApiFailure) { stationMessage = SourceStatus("측정소", issue = e.problem, httpStatus = e.httpStatus, providerCode = e.providerCode).description() }
-                    catch (_: Exception) { stationMessage = "측정소를 찾지 못했습니다. 에어코리아 측정소정보 서비스 승인 상태를 확인해주세요." }
-                    finally { busy = false }
+                }, enabled = !busy && settings.point != null) { Text("가까운 측정소 찾기") }
+            }
+            stations.filter { settings.point != null }.forEach { station ->
+                TextButton(onClick = { applyStation(station.name) }, enabled = !busy) {
+                    Text("${station.name} · ${"%.1f".format(settings.point!!.distanceKm(station.point))}km\n${station.address}", fontSize = 12.sp)
                 }
-            }, enabled = !busy && settings.point != null) { Text("가까운 측정소 찾기") }
-        }
-        stations.filter { settings.point != null }.forEach { station ->
-            TextButton(onClick = { applyStation(station.name) }, enabled = !busy) {
-                Text("${station.name} · ${"%.1f".format(settings.point!!.distanceKm(station.point))}km\n${station.address}", fontSize = 12.sp)
             }
         }
         stationMessage?.let { Text(it, fontSize = 11.sp) }
@@ -340,7 +372,7 @@ private fun RegionDialog(settings: WidgetSettings, onDismiss: () -> Unit, onAppl
             }
             Text("좌표와 예보권역을 확인해주세요. 먼지 관측 측정소는 실제 자료에서 별도로 고릅니다.", fontSize = 11.sp)
         }
-    }, confirmButton = { TextButton(onClick = { onApply(settings.copy(region = name.trim(), latitude = point!!.latitude, longitude = point.longitude, airArea = area, station = "", autoLocation = false)) }, enabled = valid) { Text("이 지역 적용") } },
+    }, confirmButton = { TextButton(onClick = { onApply(settings.copy(region = name.trim(), latitude = point!!.latitude, longitude = point.longitude, airArea = area, station = "", autoLocation = false, autoStation = true)) }, enabled = valid) { Text("이 지역 적용") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } })
 }
 

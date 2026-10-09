@@ -37,7 +37,12 @@ class WidgetRefreshWorker(context: Context, parameters: WorkerParameters) : Coro
             val settings = widgetIds(applicationContext).map { SettingsStore(applicationContext).read(it) }
                 .filter { !it.showSample }
                 .distinctBy { Triple(it.point, it.station, it.forecastArea) }
-            for (value in settings) LiveRepository(applicationContext).refresh(value)
+            for (value in settings) {
+                val repository = LiveRepository(applicationContext)
+                val selected = repository.automaticStation(value).settings
+                SettingsStore(applicationContext).updateAutomaticStations(widgetIds(applicationContext) + 0, selected)
+                repository.refresh(selected)
+            }
             TwilightWidget().updateAll(applicationContext)
             Result.success()
         } catch (e: java.util.concurrent.CancellationException) {

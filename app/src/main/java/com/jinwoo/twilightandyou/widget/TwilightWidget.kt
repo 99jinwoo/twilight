@@ -127,32 +127,23 @@ private fun CurrentContent(model: WidgetPresentation, settings: WidgetSettings, 
 private fun WideContent(model: WidgetPresentation, settings: WidgetSettings, width: Float, height: Float) {
     val short = height < 96f
     val narrow = width < 210f
-    val leftWidth = if (narrow) 59f else 84f
-    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.70f else 1f))
-    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, if (narrow || short) 0.8f else 1f))
+    val leftWidth = if (width < 150f) 56f else if (narrow) 59f else 84f
+    val gap = if (narrow) 3f else 5f
+    val currentSettings = settings.copy(fontScale = minOf(settings.fontScale, if (width < 150f) 0.67f else if (narrow || short) 0.70f else 1f))
+    val forecastFit = ((width - leftWidth - 2 * gap - 1f - if (short) 4f else 12f) / 96f).coerceIn(0.55f, 1f)
+    val forecastSettings = settings.copy(fontScale = minOf(settings.fontScale, forecastFit, if (short) 0.8f else 1f))
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Box(GlanceModifier.width(leftWidth.dp), contentAlignment = Alignment.Center) {
             CurrentContent(model, currentSettings, !short)
         }
-        Spacer(GlanceModifier.width(5.dp))
+        Spacer(GlanceModifier.width(gap.dp))
         Box(GlanceModifier.width(1.dp).height(52.dp).background(ColorProvider(Color(settings.palette.muted).copy(alpha = 0.25f)))) {}
-        Spacer(GlanceModifier.width(5.dp))
+        Spacer(GlanceModifier.width(gap.dp))
         Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {
             Label("시간별 예보", forecastSettings, 8, muted = true)
             Spacer(GlanceModifier.height(if (narrow) 1.dp else 4.dp))
             if (model.hourly.isEmpty()) {
                 Label("미연결", forecastSettings, 10, muted = true)
-            } else if (narrow) {
-                // Four compact rows fit narrow launcher cells without shrinking the current conditions.
-                model.hourly.take(4).forEach { hour ->
-                    Row(GlanceModifier.fillMaxWidth().height(if (short) 13.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Label("${if (hour.at.toLocalDate() == model.today) "" else "내일 "}${hour.hour}", forecastSettings, 8, muted = true)
-                        Spacer(GlanceModifier.defaultWeight())
-                        Label(hour.weather, forecastSettings, 11)
-                        Spacer(GlanceModifier.width(2.dp))
-                        Label(hour.temperature, forecastSettings, 9, bold = true)
-                    }
-                }
             } else Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 model.hourly.take(4).forEach { hour ->
                     Column(GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.CenterHorizontally) {

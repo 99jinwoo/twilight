@@ -36,7 +36,10 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 class AirStationFlowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    @Test fun selectingNearestStationFetchesObservationWithoutAnotherRefreshTap(): Unit = runBlocking {
+    @Test fun selectingNearestStationFetchesObservationWithoutAnotherRefreshTap(): Unit = runBlocking { exercise(false) }
+    @Test fun openingAppAutomaticallySelectsAndFetchesStationWithoutAnyTap(): Unit = runBlocking { exercise(true) }
+
+    private suspend fun exercise(automatic: Boolean) {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val requestedStation = AtomicReference<String?>(null)
         val now = ZonedDateTime.parse("2026-10-08T12:30:00+09:00")
@@ -58,7 +61,7 @@ class AirStationFlowTest {
             ApiKeyStore(context).save(ApiKeys(air = "synthetic-flow-key"))
             compose.activityRule.scenario.onActivity { activity ->
                 activity.setContent {
-                    var settings by remember { mutableStateOf(WidgetSettings()) }
+                    var settings by remember { mutableStateOf(WidgetSettings(autoStation = automatic)) }
                     TwilightTheme {
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             LiveDataPanel(settings, { settings = it }, onUpdated = {}, dataRepository = repository)
@@ -66,9 +69,12 @@ class AirStationFlowTest {
                     }
                 }
             }
+            if (!automatic) {
+            compose.onNodeWithText("측정소 변경 (선택 사항)").performScrollTo().performClick()
             compose.onNodeWithText("가까운 측정소 찾기").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("종로구 ·", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("종로구 ·", substring = true).performScrollTo().performClick()
+            }
             val deadline = SystemClock.uptimeMillis() + 10_000
             while (requestedStation.get() == null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
             assertEquals("Selecting a station must immediately query that station", "종로구", requestedStation.get())
@@ -88,7 +94,7 @@ class AirStationFlowTest {
         } finally {
             InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { bitmap ->
                 val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
-                File(directory, "air-station-flow.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                File(directory, if (automatic) "air-station-auto.png" else "air-station-flow.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 bitmap.recycle()
             }
             ApiKeyStore(context).clear(); repository.clearCache()

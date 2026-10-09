@@ -27,7 +27,8 @@ class SettingsStore(context: Context) {
             longitude = p[doublePreferencesKey(prefix + "longitude")],
             airArea = p[stringPreferencesKey(prefix + "airArea")],
             station = p[stringPreferencesKey(prefix + "station")] ?: "",
-            autoLocation = p[booleanPreferencesKey(prefix + "autoLocation")] ?: false
+            autoLocation = p[booleanPreferencesKey(prefix + "autoLocation")] ?: false,
+            autoStation = p[booleanPreferencesKey(prefix + "autoStation")] ?: true
         )
     }
 
@@ -55,6 +56,7 @@ class SettingsStore(context: Context) {
             if (settings.airArea == null) p.remove(area) else p[area] = settings.airArea
             p[stringPreferencesKey(prefix + "station")] = settings.station.trim().take(60)
             p[booleanPreferencesKey(prefix + "autoLocation")] = settings.autoLocation
+            p[booleanPreferencesKey(prefix + "autoStation")] = settings.autoStation
         }
     }
 
@@ -69,6 +71,25 @@ class SettingsStore(context: Context) {
                     location.longitude?.let { p[doublePreferencesKey(prefix + "longitude")] = it }
                     p[stringPreferencesKey(prefix + "airArea")] = location.forecastArea
                     p[stringPreferencesKey(prefix + "station")] = location.station
+                    p[booleanPreferencesKey(prefix + "autoStation")] = location.autoStation
+                }
+            }
+        }
+    }
+
+    suspend fun updateAutomaticStations(ids: List<Int>, location: WidgetSettings) {
+        for (id in ids.distinct()) {
+            val saved = read(id)
+            if (saved.autoStation && saved.point == location.point) {
+                dataStore.edit { p ->
+                    val prefix = "widget_${id}_"
+                    // Only patch the station; never overwrite independently edited styles.
+                    val lat = p[doublePreferencesKey(prefix + "latitude")]
+                    val lon = p[doublePreferencesKey(prefix + "longitude")]
+                    val point = if (lat != null && lon != null) runCatching { com.jinwoo.twilightandyou.astronomy.Coordinates(lat, lon) }.getOrNull()
+                        else Regions.find(p[stringPreferencesKey(prefix + "region")] ?: "서울")?.point
+                    if (point == location.point && p[booleanPreferencesKey(prefix + "autoStation")] != false)
+                        p[stringPreferencesKey(prefix + "station")] = location.station
                 }
             }
         }

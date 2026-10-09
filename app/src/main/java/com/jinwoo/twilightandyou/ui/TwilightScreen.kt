@@ -53,9 +53,21 @@ fun TwilightScreen(
     onSave: (() -> Unit)?,
     editingWidget: Boolean,
     busy: Boolean,
-    message: String?
+    message: String?,
+    widgetId: Int = 0
 ) {
-    var shape by remember { mutableStateOf(WidgetShape.COMPACT) }
+    val context = LocalContext.current
+    val orientation = androidx.compose.ui.platform.LocalConfiguration.current.orientation
+    val installedSize = remember(widgetId, orientation) {
+        if (widgetId <= 0) null else {
+            val options = android.appwidget.AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId)
+            val portrait = orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val width = options.getInt(if (portrait) android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH else android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH)
+            val height = options.getInt(if (portrait) android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT else android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
+            if (width > 0 && height > 0) DpSize(width.dp, height.dp) else null
+        }
+    }
+    var shape by remember(widgetId, installedSize) { mutableStateOf(installedSize?.let { WidgetShape.forSize(it.width.value, it.height.value) } ?: WidgetShape.COMPACT) }
     val preview = settings
     var revision by remember { mutableIntStateOf(0) }
     Scaffold(
@@ -93,7 +105,7 @@ fun TwilightScreen(
                         drawCircle(Color(0x66FFD8B0), radius = size.width * 0.15f, center = Offset(size.width * 0.76f, size.height * 0.31f))
                         drawCircle(Color(0x443D354E), radius = size.width * 0.9f, center = Offset(size.width * 0.8f, size.height * 1.9f))
                     }
-                    ComposeWidgetPreview(preview, shape, revision)
+                    ComposeWidgetPreview(preview, shape, revision, installedSize)
                     Text(if (settings.showSample) "샘플 화면 · 실제 날씨가 아닙니다" else "박명은 기기 계산 · 날씨는 저장된 실제 자료", color = Color(0xFFFDF0E8), fontSize = 10.sp,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp))
                 }
@@ -102,7 +114,7 @@ fun TwilightScreen(
             }
             LiveDataPanel(settings, onChange, onUpdated = { revision++ })
             SettingSection("01", "지역과 위치") {
-                ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it, latitude = null, longitude = null, airArea = null, station = "", autoLocation = false)) }
+                ChoiceRow(listOf("서울", "부산", "제주", "강릉"), settings.region, { it }) { onChange(settings.copy(region = it, latitude = null, longitude = null, airArea = null, station = "", autoLocation = false, autoStation = true)) }
                 ManualRegionSettings(settings, onChange)
             }
             SettingSection("02", "지정 박명") {
@@ -161,18 +173,21 @@ private fun SettingSection(number: String, title: String, content: @Composable C
 }
 
 @Composable
-private fun ComposeWidgetPreview(settings: WidgetSettings, shape: WidgetShape, revision: Int) {
+private fun ComposeWidgetPreview(settings: WidgetSettings, shape: WidgetShape, revision: Int, installedSize: DpSize?) {
     val context = LocalContext.current
+    val matches = installedSize != null && WidgetShape.forSize(installedSize.width.value, installedSize.height.value) == shape
+    val previewWidth = if (matches) installedSize!!.width.value.toInt() else shape.width
+    val previewHeight = if (matches) installedSize!!.height.value.toInt() else shape.height
     var remoteViews by remember { mutableStateOf<RemoteViews?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(settings, shape, revision) {
+    LaunchedEffect(settings, shape, revision, previewWidth, previewHeight) {
         failed = false
         try {
-            remoteViews = TwilightWidget(settings).compose(context, size = DpSize(shape.width.dp, shape.height.dp))
+            remoteViews = TwilightWidget(settings).compose(context, size = DpSize(previewWidth.dp, previewHeight.dp))
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { failed = true }
     }
-    Box(Modifier.size(shape.width.dp, shape.height.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(previewWidth.dp, previewHeight.dp), contentAlignment = Alignment.Center) {
         if (failed) Text("미리보기를 불러오지 못했습니다", fontSize = 10.sp)
         else remoteViews?.let { snapshot ->
             AndroidView(

@@ -11,31 +11,28 @@ class AutomaticLocationTest {
     private val busan = Coordinates(35.1796, 129.0756)
     @Test fun fixedAndUnavailableLocationsPreserveAllExistingFields(): Unit = runBlocking {
         val fixed = seoul.copy(autoLocation = false)
-        assertEquals(fixed, resolveAutomaticLocation(fixed, { error("Must not request location") }, { null }, { emptyList() }).settings)
-        assertEquals(seoul, resolveAutomaticLocation(seoul, { null }, { error("No point") }, { error("No point") }).settings)
-        assertEquals(seoul, resolveAutomaticLocation(seoul, { throw SecurityException() }, { null }, { emptyList() }).settings)
-        assertEquals(seoul, resolveAutomaticLocation(seoul, { Coordinates(0.0, 0.0) }, { null }, { emptyList() }).settings)
+        assertEquals(fixed, resolveAutomaticLocation(fixed, { error("Must not request location") }, { null }).settings)
+        assertEquals(seoul, resolveAutomaticLocation(seoul, { null }, { error("No point") }).settings)
+        assertEquals(seoul, resolveAutomaticLocation(seoul, { throw SecurityException() }, { null }).settings)
+        assertEquals(seoul, resolveAutomaticLocation(seoul, { Coordinates(0.0, 0.0) }, { null }).settings)
     }
-    @Test fun movingUpdatesWeatherTwilightForecastAreaAndNearestStationTogether(): Unit = runBlocking {
-        val result = resolveAutomaticLocation(seoul, { busan }, { LocationDescription("부산광역시 연제구", "부산") }, {
-            assertEquals(busan, it.point)
-            assertEquals("", it.station)
-            listOf(AirStation("멀리", "", seoul.point!!, "", "PM10, PM2.5"), AirStation("가까이", "", busan, "", "PM10, PM2.5"))
-        })
-        assertTrue(result.located)
-        assertEquals(busan, result.settings.point)
-        assertEquals("부산", result.settings.forecastArea)
-        assertEquals("가까이", result.settings.station)
-        assertEquals(seoul.twilight, result.settings.twilight)
-        assertTrue(result.settings.autoLocation)
+    @Test fun movingClearsOldStationWhileSmallLocationJitterPreservesIt(): Unit = runBlocking {
+        val moved = resolveAutomaticLocation(seoul, { busan }, { LocationDescription("부산광역시 연제구", "부산") })
+        assertTrue(moved.located)
+        assertEquals(busan, moved.settings.point)
+        assertEquals("부산", moved.settings.forecastArea)
+        assertEquals("", moved.settings.station)
+        assertTrue(moved.settings.autoStation)
+        val same = resolveAutomaticLocation(seoul, { Coordinates(37.5666, 126.9781) }, { LocationDescription("서울", "서울") })
+        assertEquals("종로구", same.settings.station)
     }
-    @Test fun partialResolutionDoesNotLeakPreviousAreasDustAndCancellationPropagates(): Unit = runBlocking {
-        val result = resolveAutomaticLocation(seoul, { busan }, { throw IllegalStateException() }, { throw IllegalStateException() })
+    @Test fun missingAddressDoesNotLeakPreviousAreasForecastAndCancellationPropagates(): Unit = runBlocking {
+        val result = resolveAutomaticLocation(seoul, { busan }, { throw IllegalStateException() })
         assertEquals(busan, result.settings.point)
         assertEquals("", result.settings.station)
         assertEquals("", result.settings.forecastArea)
         try {
-            resolveAutomaticLocation(seoul, { throw CancellationException() }, { null }, { emptyList() })
+            resolveAutomaticLocation(seoul, { throw CancellationException() }, { null })
             fail("Cancellation must propagate when app leaves foreground")
         } catch (_: CancellationException) { }
     }
@@ -48,5 +45,10 @@ class AutomaticLocationTest {
         assertEquals("충남", airAreaForAddress("충청남도", "논산시"))
         assertEquals("", airAreaForAddress("경기도", ""))
         assertEquals("", airAreaForAddress("unknown", "서울"))
+    }
+    @Test fun stationQueriesUseAddressNotStationNameAndSupportProvinceAliases() {
+        assertEquals(listOf("서울"), stationSearchQueries(WidgetSettings()))
+        assertEquals(listOf("수원시", "경기", "경기도"), stationSearchQueries(WidgetSettings(region = "경기도 수원시", airArea = "경기남부")))
+        assertEquals(listOf("전남", "전라남도"), stationSearchQueries(WidgetSettings(region = "집", airArea = "전남", station = "사용자가 고른 이름")))
     }
 }

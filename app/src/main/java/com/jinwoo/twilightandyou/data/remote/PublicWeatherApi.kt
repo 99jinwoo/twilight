@@ -88,8 +88,9 @@ class PublicWeatherApi(private val transport: ApiTransport = HttpsApiTransport()
     suspend fun fetch(path: String, key: String, parameters: Map<String, String>): List<JSONObject> {
         if (key.isBlank()) throw ApiFailure(DataProblem.MISSING_KEY)
         val items = mutableListOf<JSONObject>()
+        val pageSize = if (path == STATIONS) 100 else 1000
         for (page in 1..8) {
-            val response = ApiParsers.page(transport.get(path, key, parameters + mapOf("pageNo" to "$page", "numOfRows" to "1000")))
+            val response = ApiParsers.page(transport.get(path, key, parameters + mapOf("pageNo" to "$page", "numOfRows" to "$pageSize")))
             items += response.items.map(::sanitized)
             if (items.size >= response.total || response.total == 0) return items
             if (response.items.isEmpty()) throw ApiFailure(DataProblem.FORMAT)

@@ -34,7 +34,7 @@ class AutomaticLocationFlowTest {
         try {
             compose.activityRule.scenario.onActivity { activity ->
                 activity.setContent {
-                    var settings by remember { mutableStateOf(WidgetSettings(autoLocation = true)) }
+                    var settings by remember { mutableStateOf(WidgetSettings(autoLocation = true, autoStation = false)) }
                     val current = settings
                     SideEffect { displayed.set(current) }
                     TwilightTheme {

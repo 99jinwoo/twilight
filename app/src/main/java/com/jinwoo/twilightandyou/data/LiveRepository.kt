@@ -67,18 +67,42 @@ class LiveRepository(context: Context, private val api: PublicWeatherApi = Publi
     suspend fun nearestStations(settings: WidgetSettings): List<AirStation> {
         val point = settings.point ?: return emptyList()
         val now = clock()
-        refreshLock.withLock {
+        return refreshLock.withLock {
             val key = ApiKeyStore(context).read().air
             if (key.isBlank()) throw ApiFailure(DataProblem.MISSING_KEY)
             withContext(Dispatchers.IO) {
-                val plan = SourcePlan("stations-v1.1", "측정소", PublicWeatherApi.STATIONS,
-                    mapOf("returnType" to "json", "ver" to "1.1"), now.toLocalDate().toString(), key = key)
-                refreshSource(plan, now, manual = false)
-                val record = read(plan.id) ?: throw ApiFailure(DataProblem.NO_DATA)
-                if (record.items.isEmpty()) throw ApiFailure(record.issue ?: DataProblem.NO_DATA, record.httpStatus, record.providerCode)
+                var failure: ApiFailure? = null
+                // Query the municipality/province instead of downloading every station in Korea.
+                for (query in stationSearchQueries(settings)) {
+                    val id = "stations-local-v1.1/$query"
+                    val old = read(id)
+                    val plan = SourcePlan(id, "측정소", PublicWeatherApi.STATIONS,
+                        mapOf("returnType" to "json", "ver" to "1.1", "addr" to query), now.toLocalDate().toString(), key = key)
+                    if (old?.issue != null || old?.token != plan.token || old.items.isEmpty()) {
+                        // Failed station discovery is retried after one minute, including foreground retries.
+                        refreshSource(plan, now, manual = true)
+                    }
+                    val record = read(id)
+                    val found = ApiParsers.stations(record?.items.orEmpty()).sortedBy { point.distanceKm(it.point) }
+                    if (found.isNotEmpty()) return@withContext found.take(5)
+                    failure = ApiFailure(record?.issue ?: DataProblem.NO_DATA, record?.httpStatus, record?.providerCode)
+                    if (failure.problem in setOf(DataProblem.AUTH, DataProblem.QUOTA, DataProblem.MISSING_KEY)) break
+                }
+                // Previously downloaded public metadata remains useful during provider outages.
+                val cached = ApiParsers.stations(read("stations-v1.1")?.items.orEmpty()).sortedBy { point.distanceKm(it.point) }
+                if (cached.isNotEmpty()) cached.take(5) else throw (failure ?: ApiFailure(DataProblem.NO_DATA))
             }
         }
-        return withContext(Dispatchers.IO) { ApiParsers.stations(read("stations-v1.1")?.items.orEmpty()).sortedBy { point.distanceKm(it.point) }.take(5) }
+    }
+
+    suspend fun automaticStation(settings: WidgetSettings): StationSelection {
+        if (!settings.autoStation) return StationSelection(settings)
+        return try {
+            val nearest = nearestStations(settings).firstOrNull() ?: throw ApiFailure(DataProblem.NO_DATA)
+            StationSelection(settings.copy(station = nearest.name))
+        } catch (e: CancellationException) { throw e }
+        catch (e: ApiFailure) { StationSelection(settings, e.problem) }
+        catch (_: Exception) { StationSelection(settings, DataProblem.NETWORK) }
     }
 
     suspend fun clearCache() = withContext(Dispatchers.IO) {
@@ -110,6 +134,10 @@ class LiveRepository(context: Context, private val api: PublicWeatherApi = Publi
                     ?: throw ApiFailure(DataProblem.FORMAT)
                 PublicWeatherApi.AIR -> ApiParsers.air(items, now)?.at ?: throw ApiFailure(DataProblem.NO_DATA)
                 PublicWeatherApi.AIR_FORECAST -> ApiParsers.airForecasts(items, now).maxOfOrNull { it.issuedAt } ?: throw ApiFailure(DataProblem.NO_DATA)
+                PublicWeatherApi.STATIONS -> {
+                    if (ApiParsers.stations(items).isEmpty()) throw ApiFailure(DataProblem.NO_DATA)
+                    null
+                }
                 else -> plan.issued
             }
             val previousIssued = runCatching { ZonedDateTime.parse(old.issued) }.getOrNull()

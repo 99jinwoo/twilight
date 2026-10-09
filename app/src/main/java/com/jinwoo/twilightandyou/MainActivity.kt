@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                                 finally { busy = false }
                             }
                         }} else null,
-                        editingWidget = id != 0, busy = busy, message = message
+                        editingWidget = id != 0, busy = busy, message = message, widgetId = id
                     )
                 }
             }
@@ -115,7 +115,7 @@ class WidgetConfigurationActivity : ComponentActivity() {
                                 catch (_: Exception) { message = "저장하지 못했습니다. 다시 시도해주세요." }
                             finally { busy = false }
                         }
-                    }, true, busy, message)
+                    }, true, busy, message, widgetId = id)
                 }
             }
         }
