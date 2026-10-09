@@ -36,7 +36,7 @@ class WidgetRefreshWorker(context: Context, parameters: WorkerParameters) : Coro
             TwilightWidget().updateAll(applicationContext)
             val settings = widgetIds(applicationContext).map { SettingsStore(applicationContext).read(it) }
                 .filter { !it.showSample }
-                .distinctBy { Triple(it.point, it.station, it.forecastArea) }
+                .distinctBy { listOf(it.point, it.station, it.forecastArea, it.autoStation) }
             for (value in settings) {
                 val repository = LiveRepository(applicationContext)
                 val selected = repository.automaticStation(value).settings

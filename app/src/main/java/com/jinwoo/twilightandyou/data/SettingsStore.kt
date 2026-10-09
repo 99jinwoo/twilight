@@ -66,18 +66,26 @@ class SettingsStore(context: Context) {
             ids.distinct().forEach { id ->
                 val prefix = "widget_${id}_"
                 if (p[booleanPreferencesKey(prefix + "autoLocation")] == true) {
+                    val oldLat = p[doublePreferencesKey(prefix + "latitude")]
+                    val oldLon = p[doublePreferencesKey(prefix + "longitude")]
+                    val oldPoint = if (oldLat != null && oldLon != null) runCatching { com.jinwoo.twilightandyou.astronomy.Coordinates(oldLat, oldLon) }.getOrNull()
+                        else Regions.find(p[stringPreferencesKey(prefix + "region")] ?: "서울")?.point
+                    val moved = oldPoint == null || location.point == null || oldPoint.distanceKm(location.point!!) > 1.0
+                    val automaticStation = p[booleanPreferencesKey(prefix + "autoStation")] != false
                     p[stringPreferencesKey(prefix + "region")] = location.region
                     location.latitude?.let { p[doublePreferencesKey(prefix + "latitude")] = it }
                     location.longitude?.let { p[doublePreferencesKey(prefix + "longitude")] = it }
                     p[stringPreferencesKey(prefix + "airArea")] = location.forecastArea
-                    p[stringPreferencesKey(prefix + "station")] = location.station
-                    p[booleanPreferencesKey(prefix + "autoStation")] = location.autoStation
+                    if (moved || (automaticStation && location.autoStation))
+                        p[stringPreferencesKey(prefix + "station")] = if (location.autoStation) location.station else ""
+                    if (moved) p[booleanPreferencesKey(prefix + "autoStation")] = true
                 }
             }
         }
     }
 
     suspend fun updateAutomaticStations(ids: List<Int>, location: WidgetSettings) {
+        if (!location.autoStation) return
         for (id in ids.distinct()) {
             val saved = read(id)
             if (saved.autoStation && saved.point == location.point) {
