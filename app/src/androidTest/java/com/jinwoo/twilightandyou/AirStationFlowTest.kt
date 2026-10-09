@@ -69,6 +69,7 @@ class AirStationFlowTest {
                     }
                 }
             }
+            compose.waitForIdle()
             if (!automatic) {
             compose.onNodeWithText("측정소 변경 (선택 사항)").performScrollTo().performClick()
             compose.onNodeWithText("가까운 측정소 찾기").performScrollTo().performClick()
@@ -76,7 +77,7 @@ class AirStationFlowTest {
             compose.onNodeWithText("종로구 ·", substring = true).performScrollTo().performClick()
             }
             val deadline = SystemClock.uptimeMillis() + 10_000
-            while (requestedStation.get() == null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
+            compose.waitUntil(10_000) { requestedStation.get() != null }
             assertEquals("Selecting a station must immediately query that station", "종로구", requestedStation.get())
             var saved: LiveSnapshot
             do {

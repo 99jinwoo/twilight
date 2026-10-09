@@ -76,7 +76,7 @@ class SettingsStore(context: Context) {
                     location.latitude?.let { p[doublePreferencesKey(prefix + "latitude")] = it }
                     location.longitude?.let { p[doublePreferencesKey(prefix + "longitude")] = it }
                     p[stringPreferencesKey(prefix + "airArea")] = location.forecastArea
-                    if (moved || (automaticStation && location.autoStation))
+                    if (moved || (automaticStation && location.autoStation && location.station.isNotBlank()))
                         p[stringPreferencesKey(prefix + "station")] = if (location.autoStation) location.station else ""
                     if (moved) p[booleanPreferencesKey(prefix + "autoStation")] = true
                 }
@@ -85,7 +85,7 @@ class SettingsStore(context: Context) {
     }
 
     suspend fun updateAutomaticStations(ids: List<Int>, location: WidgetSettings) {
-        if (!location.autoStation) return
+        if (!location.autoStation || location.station.isBlank()) return
         for (id in ids.distinct()) {
             val saved = read(id)
             if (saved.autoStation && saved.point == location.point) {
